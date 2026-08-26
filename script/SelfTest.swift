@@ -9,6 +9,7 @@ struct TomorrowPetSelfTests {
         try testPromptSerializationWithMissingOptionalFields()
         try testPlanningUpdatesExistingTask()
         try await testGoogleCredentialValidation()
+        try testGoogleDesktopCredentialImport()
         try testPKCEKnownVector()
         try testOAuthCallbackParsing()
         try testGoogleEventDateParsing()
@@ -20,7 +21,7 @@ struct TomorrowPetSelfTests {
         try testPromptIncludesCalendarSource()
         try testPromptIncludesWeeklyPlan()
         try testLegacyTaskDecoding()
-        print("TomorrowPet self-tests passed: 16/16")
+        print("TomorrowPet self-tests passed: 17/17")
     }
 
     private static func testHorizonClassification() throws {
@@ -90,6 +91,40 @@ struct TomorrowPetSelfTests {
             throw SelfTestError.failed("Empty Google Client Secret must be rejected")
         } catch GoogleCalendarError.missingClientSecret {
             // Expected before any browser or network operation.
+        }
+    }
+
+    private static func testGoogleDesktopCredentialImport() throws {
+        let desktop = Data("""
+        {
+          "installed": {
+            "client_id": "desktop-test.apps.googleusercontent.com",
+            "project_id": "tomorrow-pet-test",
+            "client_secret": "test-secret"
+          }
+        }
+        """.utf8)
+        let credentials = try GoogleOAuthService.desktopCredentials(from: desktop)
+        try expect(
+            credentials.clientID == "desktop-test.apps.googleusercontent.com",
+            "Desktop OAuth Client ID import failed"
+        )
+        try expect(credentials.clientSecret == "test-secret", "Desktop OAuth Client Secret import failed")
+        try expect(credentials.projectID == "tomorrow-pet-test", "Desktop OAuth project ID import failed")
+
+        let web = Data("""
+        {
+          "web": {
+            "client_id": "web-test.apps.googleusercontent.com",
+            "client_secret": "test-secret"
+          }
+        }
+        """.utf8)
+        do {
+            _ = try GoogleOAuthService.desktopCredentials(from: web)
+            throw SelfTestError.failed("Web OAuth credentials must be rejected")
+        } catch GoogleCalendarError.webCredentialFile {
+            // Expected: the loopback flow requires a Desktop app client.
         }
     }
 

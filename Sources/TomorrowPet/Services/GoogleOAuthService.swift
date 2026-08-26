@@ -7,6 +7,47 @@ import Security
 struct GoogleOAuthService {
     static let calendarReadOnlyScope = "https://www.googleapis.com/auth/calendar.readonly"
 
+    static func desktopCredentials(from data: Data) throws -> GoogleOAuthClientCredentials {
+        struct Client: Decodable {
+            var clientID: String
+            var clientSecret: String
+            var projectID: String?
+
+            enum CodingKeys: String, CodingKey {
+                case clientID = "client_id"
+                case clientSecret = "client_secret"
+                case projectID = "project_id"
+            }
+        }
+        struct CredentialFile: Decodable {
+            var installed: Client?
+            var web: Client?
+        }
+
+        let file: CredentialFile
+        do {
+            file = try JSONDecoder().decode(CredentialFile.self, from: data)
+        } catch {
+            throw GoogleCalendarError.invalidCredentialFile
+        }
+        guard let installed = file.installed else {
+            if file.web != nil { throw GoogleCalendarError.webCredentialFile }
+            throw GoogleCalendarError.invalidCredentialFile
+        }
+        let clientID = installed.clientID.trimmingCharacters(in: .whitespacesAndNewlines)
+        let clientSecret = installed.clientSecret.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !clientID.isEmpty else { throw GoogleCalendarError.missingClientID }
+        guard !clientSecret.isEmpty else { throw GoogleCalendarError.missingClientSecret }
+        guard clientID.hasSuffix(".apps.googleusercontent.com") else {
+            throw GoogleCalendarError.invalidCredentialFile
+        }
+        return GoogleOAuthClientCredentials(
+            clientID: clientID,
+            clientSecret: clientSecret,
+            projectID: installed.projectID
+        )
+    }
+
     func authorize(clientID: String, clientSecret: String) async throws -> GoogleOAuthToken {
         let cleanID = clientID.trimmingCharacters(in: .whitespacesAndNewlines)
         let cleanSecret = clientSecret.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -283,9 +324,9 @@ final class LoopbackOAuthServer: @unchecked Sendable {
 
             let html = """
             <!doctype html><html lang="zh-CN"><meta charset="utf-8">
-            <title>明日团子已连接</title>
+            <title>返回明日团子</title>
             <body style="font:16px -apple-system;padding:48px;max-width:560px;margin:auto">
-            <h1>Google Calendar 已连接</h1><p>你可以关闭这个页面，回到明日团子。</p></body></html>
+            <h1>授权结果已返回明日团子</h1><p>请回到应用查看连接状态；你现在可以关闭这个页面。</p></body></html>
             """
             let body = Data(html.utf8)
             let header = "HTTP/1.1 200 OK\r\nContent-Type: text/html; charset=utf-8\r\nContent-Length: \(body.count)\r\nConnection: close\r\n\r\n"
@@ -318,6 +359,8 @@ final class LoopbackOAuthServer: @unchecked Sendable {
 enum GoogleCalendarError: LocalizedError, Equatable {
     case missingClientID
     case missingClientSecret
+    case invalidCredentialFile
+    case webCredentialFile
     case invalidAuthorizationURL
     case browserOpenFailed
     case randomGenerationFailed
@@ -339,6 +382,8 @@ enum GoogleCalendarError: LocalizedError, Equatable {
         switch self {
         case .missingClientID: "请先填写 Google OAuth Client ID。"
         case .missingClientSecret: "请先填写 Google OAuth Client Secret。"
+        case .invalidCredentialFile: "这个 JSON 不是有效的 Google Desktop OAuth 凭据文件。请从 Google Cloud 下载桌面应用客户端 JSON。"
+        case .webCredentialFile: "检测到 Web application OAuth 凭据；明日团子需要 Desktop app（桌面应用）类型的 JSON。"
         case .invalidAuthorizationURL: "无法创建 Google 授权地址。"
         case .browserOpenFailed: "无法打开默认浏览器进行 Google 授权。"
         case .randomGenerationFailed: "无法生成安全的 OAuth 随机值。"

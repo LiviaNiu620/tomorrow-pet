@@ -1,5 +1,11 @@
 import Foundation
 
+struct GoogleOAuthClientCredentials: Equatable {
+    var clientID: String
+    var clientSecret: String
+    var projectID: String?
+}
+
 struct GoogleOAuthToken: Codable, Equatable {
     var accessToken: String
     var refreshToken: String

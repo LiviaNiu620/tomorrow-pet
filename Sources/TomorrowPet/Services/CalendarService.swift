@@ -10,6 +10,7 @@ final class CalendarService: ObservableObject {
     @Published private(set) var tomorrowEvents: [CalendarEventSummary] = []
     @Published private(set) var upcomingWeekEvents: [CalendarEventSummary] = []
     @Published private(set) var isLoading = false
+    @Published private(set) var lastSuccessfulSyncAt: Date?
     @Published var errorMessage: String?
 
     private let eventStore = EKEventStore()
@@ -71,6 +72,7 @@ final class CalendarService: ObservableObject {
         let result = await loadEvents(from: start, to: end)
         tomorrowEvents = result.events
         errorMessage = result.errorMessage
+        if hasAnyCalendarAccess { lastSuccessfulSyncAt = .now }
     }
 
     func refreshUpcomingWeek(referenceDate: Date = .now) async {
@@ -83,6 +85,7 @@ final class CalendarService: ObservableObject {
         let result = await loadEvents(from: start, to: end)
         upcomingWeekEvents = result.events
         errorMessage = result.errorMessage
+        if hasAnyCalendarAccess { lastSuccessfulSyncAt = .now }
     }
 
     // 同步包装保留给现有代码；Google 数据由异步 refresh 方法合并。

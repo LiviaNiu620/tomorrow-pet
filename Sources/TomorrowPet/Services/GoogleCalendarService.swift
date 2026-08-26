@@ -1,5 +1,6 @@
 import Combine
 import Foundation
+import OSLog
 
 @MainActor
 final class GoogleCalendarService: ObservableObject {
@@ -14,14 +15,17 @@ final class GoogleCalendarService: ObservableObject {
     private let oauth = GoogleOAuthService()
     private let preferences: AppPreferences
     private let decoder = JSONDecoder()
+    private let logger = Logger(subsystem: AppConstants.bundleIdentifier, category: "GoogleCalendar")
 
     init(preferences: AppPreferences) {
         self.preferences = preferences
         isConnected = KeychainService.readGoogleToken() != nil
     }
 
-    func connect(clientID: String, clientSecret: String) async {
+    @discardableResult
+    func connect(clientID: String, clientSecret: String) async -> Bool {
         isBusy = true
+        defer { isBusy = false }
         errorMessage = nil
         statusMessage = "正在等待 Google 授权…"
         do {
@@ -30,13 +34,24 @@ final class GoogleCalendarService: ObservableObject {
             try KeychainService.saveGoogleClientSecret(clientSecret)
             try KeychainService.saveGoogleToken(token)
             isConnected = true
-            try await loadCalendars()
-            statusMessage = "Google Calendar 已连接"
         } catch {
             errorMessage = error.localizedDescription
             statusMessage = nil
+            logger.error("Google Calendar authorization failed: \(error.localizedDescription, privacy: .private)")
+            return false
         }
-        isBusy = false
+
+        do {
+            try await loadCalendars()
+            statusMessage = "Google Calendar 已连接"
+            logger.info("Google Calendar authorization and calendar list sync succeeded")
+            return true
+        } catch {
+            statusMessage = "Google 账户已授权；日历列表尚未同步"
+            errorMessage = "\(error.localizedDescription)\n请确认该 Google Cloud 项目已启用 Google Calendar API，然后点击“刷新日历列表”。"
+            logger.error("Google Calendar list sync failed after authorization: \(error.localizedDescription, privacy: .private)")
+            return true
+        }
     }
 
     func restoreConnection() async {
@@ -45,6 +60,7 @@ final class GoogleCalendarService: ObservableObject {
             try await loadCalendars()
         } catch {
             errorMessage = error.localizedDescription
+            logger.error("Google Calendar restore failed: \(error.localizedDescription, privacy: .private)")
         }
     }
 

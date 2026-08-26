@@ -74,8 +74,11 @@ Google OAuth 凭据不会随项目提供，初始保持为空。配置步骤：
 2. 启用 **Google Calendar API**。
 3. 配置 OAuth consent screen；如果应用仍处于测试状态，把自己的 Google 账户加入测试用户。
 4. 在“API 和服务 → 凭据”中创建 OAuth Client，应用类型选择 **Desktop app（桌面应用）**。
-5. 启动明日团子，打开“设置 → 日历”，填写 Client ID 和 Client Secret，再点击“连接 Google Calendar”。
-6. 浏览器授权完成后返回应用，勾选要提供给团子读取的日历。
+5. 在凭据列表中点击该 Desktop app 客户端的下载按钮，取得 OAuth JSON 文件。
+6. 启动明日团子，打开“设置 → 日历”，点击“导入 Desktop OAuth JSON 并连接”，选择刚下载的文件。
+7. 在浏览器中完成授权，返回应用后勾选要提供给团子读取的日历。
+
+Apple Calendar 与 Google Calendar 是两个独立数据源，可以同时连接。连接完成后，“设置 → 日历”的连接总览会显示 **Apple + Google Calendar**；统一同步会合并两边事件，并对 Apple 中已经同步的 Google 事件自动去重。AI 明日计划和周计划使用合并后的结果。
 
 授权流程使用 OAuth 2.0 Installed App、PKCE `S256`、随机 `state` 和本机随机端口 loopback redirect：
 
@@ -83,9 +86,9 @@ Google OAuth 凭据不会随项目提供，初始保持为空。配置步骤：
 http://127.0.0.1:<random-port>/oauth2callback
 ```
 
-应用只申请 `https://www.googleapis.com/auth/calendar.readonly`。Client Secret、access token 和 refresh token 仅存储在 macOS Keychain；Client ID 和日历选择存储在 UserDefaults。断开时可同时请求 Google 撤销授权。没有 Google 凭据或 Google 暂时不可用时，本地任务与 Apple Calendar 仍可正常使用。
+应用只申请 `https://www.googleapis.com/auth/calendar.readonly`。导入的 JSON 不会复制进应用项目或任务数据；授权成功后，Client Secret、access token 和 refresh token 仅存储在 macOS Keychain，Client ID 和日历选择存储在 UserDefaults。断开时可同时请求 Google 撤销授权。没有 Google 凭据或 Google 暂时不可用时，本地任务与 Apple Calendar 仍可正常使用。设置页也保留了手动填写 Client ID / Client Secret 的备用入口。
 
-如果 Google consent screen 未发布或未通过验证，只允许测试用户登录，这是 Google Cloud 项目状态所致；将账户加入测试用户即可在个人使用场景中继续。
+如果 Google consent screen 未发布或未通过验证，只允许测试用户登录，这是 Google Cloud 项目状态所致；将账户加入测试用户即可在个人使用场景中继续。如果浏览器授权成功但读取不到日历列表，请先确认项目已启用 **Google Calendar API**。
 
 ## OpenAI 数据范围
 
