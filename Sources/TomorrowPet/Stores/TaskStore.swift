@@ -237,6 +237,16 @@ final class TaskStore: ObservableObject {
                 continue
             }
 
+            if let inputItemID = suggestion.inputItemID,
+               let index = tasks.firstIndex(where: { $0.sourceEventID == inputItemID }) {
+                if tasks[index].status.isActive {
+                    tasks[index].plannedDate = date
+                    tasks[index].focusDate = markAsFocus ? date : tasks[index].focusDate
+                    tasks[index].status = .planned
+                }
+                continue
+            }
+
             let areaID = areas.first(where: { $0.name.caseInsensitiveCompare(suggestion.area) == .orderedSame })?.id
             var task = TaskItem(
                 title: suggestion.title,
@@ -250,6 +260,7 @@ final class TaskStore: ObservableObject {
                 source: .openAI
             )
             task.manualHorizon = .immediate
+            task.sourceEventID = suggestion.inputItemID
             tasks.append(task)
         }
         save()

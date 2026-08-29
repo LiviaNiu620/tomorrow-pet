@@ -10,6 +10,7 @@ struct TomorrowPlannerView: View {
     @State private var isGenerating = false
     @State private var errorMessage: String?
     @State private var accepted = false
+    @AppStorage("tomorrowPlannerAdditionalInput") private var additionalInput = ""
 
     private let planningService = OpenAIPlanningService()
 
@@ -19,6 +20,7 @@ struct TomorrowPlannerView: View {
                 header
                 calendarCard
                 weeklyDirectionCard
+                additionalInputCard
                 taskCandidatesCard
 
                 if let generatedPlan {
@@ -54,7 +56,7 @@ struct TomorrowPlannerView: View {
             VStack(alignment: .leading, spacing: 5) {
                 Text("一起安排明天")
                     .font(.largeTitle.bold())
-                Text("\(tomorrow.formatted(date: .complete, time: .omitted)) · AI 会参考 Calendar 和你的全部任务，但只有你确认后才会保存。")
+                Text("\(tomorrow.formatted(date: .complete, time: .omitted)) · AI 会参考 Calendar、任务库和你的补充事项，但只有你确认后才会保存。")
                     .foregroundStyle(.secondary)
             }
         }
@@ -144,6 +146,47 @@ struct TomorrowPlannerView: View {
         }
     }
 
+    private var additionalInputCard: some View {
+        GroupBox {
+            VStack(alignment: .leading, spacing: 10) {
+                ZStack(alignment: .topLeading) {
+                    TextEditor(text: $additionalInput)
+                        .font(.body)
+                        .frame(minHeight: 96, maxHeight: 150)
+                        .scrollContentBackground(.hidden)
+                        .padding(6)
+                        .background(.quaternary.opacity(0.35), in: RoundedRectangle(cornerRadius: 8))
+
+                    if additionalInput.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                        Text("例如：\n给导师回复实验进度\n买猫粮\n整理周五汇报的三张图")
+                            .foregroundStyle(.tertiary)
+                            .padding(.horizontal, 12)
+                            .padding(.vertical, 14)
+                            .allowsHitTesting(false)
+                    }
+                }
+
+                HStack(alignment: .firstTextBaseline) {
+                    Text("建议一行写一件事，最多 20 条。AI 会整理分类、优先级和估时；确认计划后才会创建任务。")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                    Spacer()
+                    if !additionalInput.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                        Text("约 \(additionalInputLineCount) 条")
+                            .font(.caption.monospacedDigit())
+                            .foregroundStyle(additionalInputLineCount > 20 ? Color.red : Color.secondary)
+                        Button("清空") { additionalInput = "" }
+                            .buttonStyle(.borderless)
+                            .font(.caption)
+                    }
+                }
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+        } label: {
+            Label("明日补充事项", systemImage: "square.and.pencil")
+        }
+    }
+
     @ViewBuilder
     private var weeklyDirectionCard: some View {
         if let plan = store.currentWeeklyPlan,
@@ -175,7 +218,7 @@ struct TomorrowPlannerView: View {
     private var generateCard: some View {
         GroupBox {
             VStack(alignment: .leading, spacing: 12) {
-                Text("OpenAI 会选出最多三项重点，并说明原因、预计用时和明日负荷。API Key 初始为空，需要在设置中填写。")
+                Text("OpenAI 会选出最多三项重点，逐条保留你的补充事项，并说明原因、预计用时和明日负荷。API Key 初始为空，需要在设置中填写。")
                     .foregroundStyle(.secondary)
 
                 HStack {
@@ -215,7 +258,7 @@ struct TomorrowPlannerView: View {
 
                 if !plan.additionalTasks.isEmpty {
                     Divider()
-                    Text("有余力再做")
+                    Text("其他任务与补充事项")
                         .font(.headline)
                     ForEach(plan.additionalTasks) { suggestion in
                         suggestionRow(suggestion, isFocus: false)
@@ -274,7 +317,7 @@ struct TomorrowPlannerView: View {
                 Text(suggestion.reason)
                     .font(.caption)
                     .foregroundStyle(.secondary)
-                Text(suggestion.source == "calendar_preparation" ? "AI 根据 Calendar 建议" : "来自任务库")
+                Text(suggestionSourceText(suggestion))
                     .font(.caption2)
                     .foregroundStyle(.tertiary)
             }
@@ -296,6 +339,12 @@ struct TomorrowPlannerView: View {
         }
     }
 
+    private var additionalInputLineCount: Int {
+        additionalInput.split(whereSeparator: \Character.isNewline).filter {
+            !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        }.count
+    }
+
     private var errorBinding: Binding<Bool> {
         Binding(get: { errorMessage != nil }, set: { if !$0 { errorMessage = nil } })
     }
@@ -307,6 +356,7 @@ struct TomorrowPlannerView: View {
         Task {
             do {
                 await calendarService.refreshTomorrow()
+                let userInputItems = try OpenAIPlanningService.additionalInputItems(from: additionalInput)
                 let plan = try await planningService.createTomorrowPlan(
                     apiKey: KeychainService.readAPIKey(),
                     model: preferences.openAIModel,
@@ -315,7 +365,8 @@ struct TomorrowPlannerView: View {
                     areas: store.areas,
                     events: calendarService.tomorrowEvents,
                     weeklyPlan: store.currentWeeklyPlan,
-                    sopItems: DailySOPTemplate.planningItems(for: tomorrow)
+                    sopItems: DailySOPTemplate.planningItems(for: tomorrow),
+                    userInputItems: userInputItems
                 )
                 generatedPlan = plan
                 selectedSuggestionIDs = Set((plan.topThree + plan.additionalTasks).map(\.id))
@@ -332,6 +383,19 @@ struct TomorrowPlannerView: View {
         let additional = plan.additionalTasks.filter { selectedSuggestionIDs.contains($0.id) }
         store.apply(top, to: tomorrow, markAsFocus: true)
         store.apply(additional, to: tomorrow, markAsFocus: false)
+        let userSuggestions = (plan.topThree + plan.additionalTasks).filter { $0.source == "user_input" }
+        if !userSuggestions.isEmpty,
+           userSuggestions.allSatisfy({ selectedSuggestionIDs.contains($0.id) }) {
+            additionalInput = ""
+        }
         accepted = true
+    }
+
+    private func suggestionSourceText(_ suggestion: AISuggestedTask) -> String {
+        switch suggestion.source {
+        case "calendar_preparation": "AI 根据 Calendar 建议"
+        case "user_input": "来自你的补充事项 · 确认后创建任务"
+        default: "来自任务库"
+        }
     }
 }

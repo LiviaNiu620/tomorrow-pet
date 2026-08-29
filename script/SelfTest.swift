@@ -21,10 +21,13 @@ struct TomorrowPetSelfTests {
         try testPromptIncludesCalendarSource()
         try testPromptIncludesWeeklyPlan()
         try testPromptIncludesDailySOP()
+        try testAdditionalInputParsingAndPrompt()
+        try testUserInputCoverageValidation()
+        try testUserInputCreatesTaskWithoutDuplicates()
         try testDailySOPScheduleVariants()
         try testDailySOPCompletionIsolation()
         try testLegacyTaskDecoding()
-        print("TomorrowPet self-tests passed: 20/20")
+        print("TomorrowPet self-tests passed: 23/23")
     }
 
     private static func testHorizonClassification() throws {
@@ -312,6 +315,94 @@ struct TomorrowPetSelfTests {
         try expect(payload.contains("daily_sop"), "Prompt must label daily SOP context")
         try expect(payload.contains("20:20–22:00"), "Prompt must include fixed evening focus time")
         try expect(payload.contains("个人学习和自己的工作"), "Prompt must include the SOP commitment title")
+    }
+
+    private static func testAdditionalInputParsingAndPrompt() throws {
+        let items = try OpenAIPlanningService.additionalInputItems(from: """
+        - [ ] 给导师回复实验进度
+        2. 买猫粮
+
+        【 】整理周五汇报的三张图
+        """)
+        try expect(items.map(\.text) == ["给导师回复实验进度", "买猫粮", "整理周五汇报的三张图"], "Additional-input line parsing failed")
+        try expect(Set(items.map(\.id)).count == 3, "Each additional input must receive a unique ID")
+
+        let payload = try OpenAIPlanningService().promptPayload(
+            tomorrow: .now,
+            tasks: [],
+            areas: [],
+            events: [],
+            userInputItems: items
+        )
+        try expect(payload.contains("user_input_items"), "Prompt must label user input context")
+        try expect(payload.contains("给导师回复实验进度"), "Prompt must preserve the user's additional input")
+    }
+
+    private static func testUserInputCoverageValidation() throws {
+        let items = [
+            PlanningInputItem(id: "input-a", text: "回复导师"),
+            PlanningInputItem(id: "input-b", text: "买猫粮")
+        ]
+        let suggestions = items.map { item in
+            AISuggestedTask(
+                taskID: nil,
+                inputItemID: item.id,
+                title: item.text,
+                area: "个人",
+                reason: "用户补充",
+                estimatedMinutes: 20,
+                priority: "medium",
+                source: "user_input"
+            )
+        }
+        let complete = AIPlanSuggestion(
+            summary: "ok",
+            topThree: suggestions,
+            additionalTasks: [],
+            workloadAssessment: "合理",
+            notes: ""
+        )
+        try OpenAIPlanningService.validateUserInputCoverage(plan: complete, items: items)
+
+        let incomplete = AIPlanSuggestion(
+            summary: "missing",
+            topThree: [suggestions[0]],
+            additionalTasks: [],
+            workloadAssessment: "合理",
+            notes: ""
+        )
+        do {
+            try OpenAIPlanningService.validateUserInputCoverage(plan: incomplete, items: items)
+            throw SelfTestError.failed("Missing user input must be rejected")
+        } catch PlanningError.incompleteUserInputMapping {
+            // Expected: no user-supplied item may be silently dropped.
+        }
+    }
+
+    @MainActor
+    private static func testUserInputCreatesTaskWithoutDuplicates() throws {
+        let store = TaskStore(
+            fileURL: FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString),
+            persistsChanges: false
+        )
+        let suggestion = AISuggestedTask(
+            taskID: nil,
+            inputItemID: "input-stable-id",
+            title: "给导师回复实验进度",
+            area: "工作",
+            reason: "来自明日补充事项",
+            estimatedMinutes: 25,
+            priority: "high",
+            source: "user_input"
+        )
+        let tomorrow = try require(Calendar.current.date(byAdding: .day, value: 1, to: .now))
+        store.apply([suggestion], to: tomorrow, markAsFocus: true)
+        try expect(store.tasks.count == 1, "User input must become a task after confirmation")
+        try expect(store.tasks[0].sourceEventID == "input-stable-id", "Created task must retain its user-input identity")
+        try expect(store.tasks[0].isPlanned(on: tomorrow), "Created user-input task must be planned for tomorrow")
+
+        store.apply([suggestion], to: tomorrow, markAsFocus: true)
+        try expect(store.tasks.count == 1, "Accepting the same plan twice must not duplicate a user-input task")
     }
 
     private static func testDailySOPScheduleVariants() throws {

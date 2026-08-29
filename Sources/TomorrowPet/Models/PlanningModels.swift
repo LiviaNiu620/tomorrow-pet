@@ -22,9 +22,15 @@ struct CalendarEventSummary: Identifiable, Codable, Hashable {
     var source: CalendarSource = .apple
 }
 
+struct PlanningInputItem: Identifiable, Codable, Hashable {
+    var id: String
+    var text: String
+}
+
 struct AISuggestedTask: Identifiable, Codable, Hashable {
     var id = UUID()
     var taskID: String?
+    var inputItemID: String? = nil
     var title: String
     var area: String
     var reason: String
@@ -34,6 +40,7 @@ struct AISuggestedTask: Identifiable, Codable, Hashable {
 
     enum CodingKeys: String, CodingKey {
         case taskID = "task_id"
+        case inputItemID = "input_item_id"
         case title
         case area
         case reason
