@@ -24,10 +24,16 @@ struct TomorrowPetSelfTests {
         try testAdditionalInputParsingAndPrompt()
         try testUserInputCoverageValidation()
         try testUserInputCreatesTaskWithoutDuplicates()
+        try testEditedSuggestionUpdatesExistingTask()
         try testDailySOPScheduleVariants()
         try testDailySOPCompletionIsolation()
+        try testLegacySOPStateMigration()
+        try testSOPConfigurationPersistence()
+        try testBreakdownPromptIncludesTaskContext()
+        try testBreakdownResponseDecodingAndValidation()
+        try testBreakdownCreatesLinkedTasksWithoutDuplicates()
         try testLegacyTaskDecoding()
-        print("TomorrowPet self-tests passed: 23/23")
+        print("TomorrowPet self-tests passed: 30/30")
     }
 
     private static func testHorizonClassification() throws {
@@ -405,6 +411,30 @@ struct TomorrowPetSelfTests {
         try expect(store.tasks.count == 1, "Accepting the same plan twice must not duplicate a user-input task")
     }
 
+    @MainActor
+    private static func testEditedSuggestionUpdatesExistingTask() throws {
+        let store = TaskStore(
+            fileURL: FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString),
+            persistsChanges: false
+        )
+        let created = try require(store.addTask(title: "旧标题"))
+        let workArea = try require(store.areas.first { $0.name == "工作" })
+        let suggestion = AISuggestedTask(
+            taskID: created.id.uuidString,
+            title: "编辑后的标题",
+            area: workArea.name,
+            reason: "用户确认了编辑",
+            estimatedMinutes: 45,
+            priority: "high",
+            source: "existing_task"
+        )
+        store.apply([suggestion], to: .now, markAsFocus: true)
+        let updated = try require(store.task(id: created.id))
+        try expect(updated.title == "编辑后的标题", "Edited AI title must update the existing task")
+        try expect(updated.areaID == workArea.id, "Edited AI area must update the existing task")
+        try expect(updated.priority == .high && updated.estimatedMinutes == 45, "Edited AI planning fields must be saved")
+    }
+
     private static func testDailySOPScheduleVariants() throws {
         var calendar = Calendar(identifier: .gregorian)
         calendar.timeZone = try require(TimeZone(identifier: "America/Los_Angeles"))
@@ -447,6 +477,123 @@ struct TomorrowPetSelfTests {
         try expect(!store.isCompleted("wake", on: firstDay, calendar: calendar), "SOP reset must clear only that day")
     }
 
+    @MainActor
+    private static func testLegacySOPStateMigration() throws {
+        let file = FileManager.default.temporaryDirectory.appendingPathComponent("sop-legacy-\(UUID().uuidString).json")
+        let legacy = ["2026-08-27": Set(["wake", "wash"])]
+        try JSONEncoder().encode(legacy).write(to: file)
+        let store = DailySOPStore(fileURL: file, persistsChanges: true)
+        try expect(store.completionByDay["2026-08-27"] == Set(["wake", "wash"]), "Legacy SOP completions must migrate")
+        try expect(!store.configuration.dailySections.isEmpty, "Legacy SOP state must receive the default editable template")
+    }
+
+    @MainActor
+    private static func testSOPConfigurationPersistence() throws {
+        let file = FileManager.default.temporaryDirectory.appendingPathComponent("sop-config-\(UUID().uuidString).json")
+        let store = DailySOPStore(fileURL: file, persistsChanges: true)
+        var configuration = store.configuration
+        let stableID = try require(configuration.dailySections.first?.items.first?.id)
+        configuration.dailySections[0].title = "我的早晨节奏"
+        configuration.dailySections[0].items[0].title = "七点立即起床"
+        configuration.dailySections[0].items.append(
+            DailySOPItem(
+                id: "sop-test-added",
+                time: "08:25",
+                title: "检查随身物品",
+                sectionID: configuration.dailySections[0].id,
+                sectionTitle: configuration.dailySections[0].title
+            )
+        )
+        store.setCompleted(stableID, completed: true, on: .now)
+        store.updateConfiguration(configuration)
+
+        let reloaded = DailySOPStore(fileURL: file, persistsChanges: true)
+        try expect(reloaded.configuration.dailySections[0].title == "我的早晨节奏", "Edited SOP section must persist")
+        try expect(reloaded.configuration.dailySections[0].items[0].id == stableID, "Existing SOP IDs must remain stable")
+        try expect(reloaded.configuration.dailySections[0].items.contains { $0.id == "sop-test-added" }, "Added SOP item must persist")
+        try expect(reloaded.isCompleted(stableID, on: .now), "Editing SOP must preserve completion history")
+        try expect(reloaded.planningItems(for: .now).contains { $0.title == "七点立即起床" }, "AI context must use the edited SOP")
+    }
+
+    private static func testBreakdownPromptIncludesTaskContext() throws {
+        let task = TaskItem(
+            title: "完成论文实验",
+            notes: "需要整理基线和消融结果",
+            priority: .high,
+            estimatedMinutes: 240,
+            dueDate: .now.addingTimeInterval(86_400 * 5),
+            recurrence: RecurrenceRule(frequency: .weekly)
+        )
+        let payload = try OpenAITaskBreakdownService().promptPayload(
+            task: task,
+            tasks: [task, TaskItem(title: "准备组会")],
+            areas: TaskArea.defaults,
+            events: [],
+            weeklyPlan: WeeklyPlan(
+                weekStart: .now,
+                goals: ["完成实验"],
+                notes: "优先跑通",
+                selectedTaskIDs: [task.id],
+                updatedAt: .now
+            ),
+            sopItems: DailySOPTemplate.planningItems(for: .now)
+        )
+        try expect(payload.contains("完成论文实验"), "Breakdown prompt must contain the selected task")
+        try expect(payload.contains("需要整理基线和消融结果"), "Breakdown prompt must contain task notes")
+        try expect(payload.contains("weekly"), "Breakdown prompt must contain recurrence")
+        try expect(payload.contains("完成实验"), "Breakdown prompt must contain weekly direction")
+        try expect(payload.contains("daily_sop"), "Breakdown prompt must include SOP context")
+    }
+
+    private static func testBreakdownResponseDecodingAndValidation() throws {
+        let json = """
+        {
+          "summary": "先准备，再执行，最后检查。",
+          "steps": [
+            {"step_id":"prepare","title":"准备材料","notes":"列出输入","area":"工作","estimated_minutes":20,"priority":"high","planned_date":null,"due_date":null,"completion_criteria":"材料列表完整","depends_on_step_ids":[]},
+            {"step_id":"execute","title":"执行主要工作","notes":"完成核心产出","area":"工作","estimated_minutes":90,"priority":"high","planned_date":null,"due_date":null,"completion_criteria":"核心产出可查看","depends_on_step_ids":["prepare"]},
+            {"step_id":"review","title":"检查并提交","notes":"核对要求","area":"工作","estimated_minutes":30,"priority":"medium","planned_date":null,"due_date":null,"completion_criteria":"已提交并留存记录","depends_on_step_ids":["execute"]}
+          ],
+          "risks": ["预留返工时间"]
+        }
+        """
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+        let result = try decoder.decode(AITaskBreakdown.self, from: Data(json.utf8))
+        try OpenAITaskBreakdownService.validate(result, parentTask: TaskItem(title: "大任务"))
+        try expect(result.steps[1].dependsOnStepIDs == ["prepare"], "Breakdown dependencies must decode")
+
+        var invalid = result
+        invalid.steps[0].estimatedMinutes = 600
+        do {
+            try OpenAITaskBreakdownService.validate(invalid, parentTask: TaskItem(title: "大任务"))
+            throw SelfTestError.failed("Invalid breakdown duration must be rejected")
+        } catch PlanningError.invalidPlan {
+            // Expected.
+        }
+    }
+
+    @MainActor
+    private static func testBreakdownCreatesLinkedTasksWithoutDuplicates() throws {
+        let store = TaskStore(
+            fileURL: FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString),
+            persistsChanges: false
+        )
+        let parent = try require(store.addTask(title: "发布新版本"))
+        let steps = [
+            AIBreakdownStep(id: "one", title: "整理变更", notes: "汇总内容", area: "工作", estimatedMinutes: 20, priority: "high", plannedDate: nil, dueDate: nil, completionCriteria: "变更清单完成", dependsOnStepIDs: []),
+            AIBreakdownStep(id: "two", title: "构建版本", notes: "运行构建", area: "工作", estimatedMinutes: 30, priority: "high", plannedDate: .now, dueDate: nil, completionCriteria: "构建成功", dependsOnStepIDs: ["one"]),
+            AIBreakdownStep(id: "three", title: "发布并检查", notes: "检查下载", area: "工作", estimatedMinutes: 25, priority: "medium", plannedDate: nil, dueDate: nil, completionCriteria: "发布可用", dependsOnStepIDs: ["two"])
+        ]
+        store.applyBreakdown(steps, to: parent)
+        let children = store.tasks.filter { $0.parentTaskID == parent.id }
+        try expect(children.count == 3, "Confirmed breakdown must create child tasks")
+        try expect(children.allSatisfy { $0.source == .openAI }, "Breakdown children must retain their AI source")
+        try expect(children.contains { $0.notes.contains("完成标准") }, "Breakdown children must keep completion criteria")
+        store.applyBreakdown(steps, to: parent)
+        try expect(store.tasks.filter { $0.parentTaskID == parent.id }.count == 3, "Confirming the same breakdown twice must not duplicate children")
+    }
+
     private static func testLegacyTaskDecoding() throws {
         let encoder = JSONEncoder()
         let current = TaskItem(title: "旧数据")
@@ -454,12 +601,13 @@ struct TomorrowPetSelfTests {
         var object = try require(JSONSerialization.jsonObject(with: data) as? [String: Any])
         object.removeValue(forKey: "recurrence")
         object.removeValue(forKey: "recurrenceSeriesID")
+        object.removeValue(forKey: "parentTaskID")
         object.removeValue(forKey: "trashedFromStatus")
         object.removeValue(forKey: "deletedAt")
         let legacyData = try JSONSerialization.data(withJSONObject: object)
         let decoded = try JSONDecoder().decode(TaskItem.self, from: legacyData)
         try expect(decoded.title == "旧数据", "Legacy task data must remain decodable")
-        try expect(decoded.deletedAt == nil && decoded.recurrence == nil, "New optional fields must default to nil")
+        try expect(decoded.deletedAt == nil && decoded.recurrence == nil && decoded.parentTaskID == nil, "New optional fields must default to nil")
     }
 
     private static func expect(_ condition: @autoclosure () -> Bool, _ message: String) throws {

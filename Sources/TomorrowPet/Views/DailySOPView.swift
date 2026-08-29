@@ -5,9 +5,10 @@ struct DailySOPView: View {
 
     @State private var selectedDate = Calendar.current.startOfDay(for: .now)
     @State private var showResetConfirmation = false
+    @State private var showTemplateEditor = false
 
     private var sections: [DailySOPSection] {
-        DailySOPTemplate.sections(for: selectedDate)
+        store.sections(for: selectedDate)
     }
 
     private var allItems: [DailySOPItem] {
@@ -40,6 +41,12 @@ struct DailySOPView: View {
         .toolbar {
             ToolbarItemGroup(placement: .primaryAction) {
                 Button {
+                    showTemplateEditor = true
+                } label: {
+                    Label("编辑 SOP", systemImage: "square.and.pencil")
+                }
+
+                Button {
                     moveDay(-1)
                 } label: {
                     Label("前一天", systemImage: "chevron.left")
@@ -56,6 +63,9 @@ struct DailySOPView: View {
                     Label("后一天", systemImage: "chevron.right")
                 }
             }
+        }
+        .sheet(isPresented: $showTemplateEditor) {
+            SOPTemplateEditorView(store: store)
         }
         .confirmationDialog(
             "清空这一天的全部 SOP 打卡？",

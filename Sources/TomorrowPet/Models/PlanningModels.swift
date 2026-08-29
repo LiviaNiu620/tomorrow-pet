@@ -79,3 +79,35 @@ struct WeeklyPlan: Codable, Hashable {
     var selectedTaskIDs: [UUID]
     var updatedAt: Date
 }
+
+struct AITaskBreakdown: Codable, Hashable {
+    var summary: String
+    var steps: [AIBreakdownStep]
+    var risks: [String]
+}
+
+struct AIBreakdownStep: Identifiable, Codable, Hashable {
+    var id: String
+    var title: String
+    var notes: String
+    var area: String
+    var estimatedMinutes: Int
+    var priority: String
+    var plannedDate: Date?
+    var dueDate: Date?
+    var completionCriteria: String
+    var dependsOnStepIDs: [String]
+
+    enum CodingKeys: String, CodingKey {
+        case id = "step_id"
+        case title
+        case notes
+        case area
+        case estimatedMinutes = "estimated_minutes"
+        case priority
+        case plannedDate = "planned_date"
+        case dueDate = "due_date"
+        case completionCriteria = "completion_criteria"
+        case dependsOnStepIDs = "depends_on_step_ids"
+    }
+}

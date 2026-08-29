@@ -228,18 +228,27 @@ final class TaskStore: ObservableObject {
             if let rawID = suggestion.taskID,
                let taskID = UUID(uuidString: rawID),
                let index = tasks.firstIndex(where: { $0.id == taskID }) {
+                tasks[index].title = suggestion.title.trimmingCharacters(in: .whitespacesAndNewlines)
+                tasks[index].areaID = areas.first(where: {
+                    $0.name.caseInsensitiveCompare(suggestion.area) == .orderedSame
+                })?.id ?? tasks[index].areaID
+                tasks[index].priority = Self.priority(from: suggestion.priority)
                 tasks[index].plannedDate = date
                 tasks[index].focusDate = markAsFocus ? date : tasks[index].focusDate
                 tasks[index].status = .planned
-                if tasks[index].estimatedMinutes == nil {
-                    tasks[index].estimatedMinutes = suggestion.estimatedMinutes
-                }
+                tasks[index].estimatedMinutes = suggestion.estimatedMinutes
                 continue
             }
 
             if let inputItemID = suggestion.inputItemID,
                let index = tasks.firstIndex(where: { $0.sourceEventID == inputItemID }) {
                 if tasks[index].status.isActive {
+                    tasks[index].title = suggestion.title.trimmingCharacters(in: .whitespacesAndNewlines)
+                    tasks[index].areaID = areas.first(where: {
+                        $0.name.caseInsensitiveCompare(suggestion.area) == .orderedSame
+                    })?.id ?? tasks[index].areaID
+                    tasks[index].priority = Self.priority(from: suggestion.priority)
+                    tasks[index].estimatedMinutes = suggestion.estimatedMinutes
                     tasks[index].plannedDate = date
                     tasks[index].focusDate = markAsFocus ? date : tasks[index].focusDate
                     tasks[index].status = .planned
@@ -261,6 +270,46 @@ final class TaskStore: ObservableObject {
             )
             task.manualHorizon = .immediate
             task.sourceEventID = suggestion.inputItemID
+            tasks.append(task)
+        }
+        save()
+    }
+
+    func applyBreakdown(_ steps: [AIBreakdownStep], to parentTask: TaskItem) {
+        let cleanSteps = steps.filter { step in
+            !step.title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                && !tasks.contains(where: {
+                    $0.sourceEventID == Self.breakdownSourceID(parentTask.id, step.id)
+                })
+        }
+        guard !cleanSteps.isEmpty else { return }
+
+        registerUndo(message: "已创建 \(cleanSteps.count) 个拆解任务")
+        for step in cleanSteps {
+            let areaID = areas.first(where: {
+                $0.name.caseInsensitiveCompare(step.area) == .orderedSame
+            })?.id ?? parentTask.areaID
+            let notes = [
+                step.notes.trimmingCharacters(in: .whitespacesAndNewlines),
+                "完成标准：\(step.completionCriteria.trimmingCharacters(in: .whitespacesAndNewlines))"
+            ]
+            .filter { !$0.isEmpty }
+            .joined(separator: "\n\n")
+
+            let task = TaskItem(
+                title: step.title.trimmingCharacters(in: .whitespacesAndNewlines),
+                notes: notes,
+                areaID: areaID,
+                project: parentTask.project.isEmpty ? parentTask.title : parentTask.project,
+                status: step.plannedDate == nil ? .next : .planned,
+                priority: Self.priority(from: step.priority),
+                estimatedMinutes: min(480, max(5, step.estimatedMinutes)),
+                dueDate: step.dueDate ?? parentTask.dueDate,
+                plannedDate: step.plannedDate,
+                source: .openAI,
+                sourceEventID: Self.breakdownSourceID(parentTask.id, step.id),
+                parentTaskID: parentTask.id
+            )
             tasks.append(task)
         }
         save()
@@ -394,5 +443,9 @@ final class TaskStore: ObservableObject {
         case "low": .low
         default: .none
         }
+    }
+
+    static func breakdownSourceID(_ parentTaskID: UUID, _ stepID: String) -> String {
+        "ai-breakdown:\(parentTaskID.uuidString):\(stepID)"
     }
 }

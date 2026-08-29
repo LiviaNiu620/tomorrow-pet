@@ -49,6 +49,10 @@ struct TaskListView: View {
                                     requestPermanentDeletion([task.id])
                                 }
                             } else {
+                                Button("编辑任务") {
+                                    selectedTaskID = task.id
+                                }
+                                Divider()
                                 Button(task.status == .completed ? "标记为未完成" : "标记完成") {
                                     store.setCompleted(task.id, completed: task.status != .completed)
                                 }

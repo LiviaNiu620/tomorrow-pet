@@ -2,6 +2,7 @@ import SwiftUI
 
 struct TomorrowPlannerView: View {
     @ObservedObject var store: TaskStore
+    @ObservedObject var sopStore: DailySOPStore
     @ObservedObject var calendarService: CalendarService
     @ObservedObject var preferences: AppPreferences
 
@@ -10,6 +11,7 @@ struct TomorrowPlannerView: View {
     @State private var isGenerating = false
     @State private var errorMessage: String?
     @State private var accepted = false
+    @State private var editingSuggestion: AISuggestedTask?
     @AppStorage("tomorrowPlannerAdditionalInput") private var additionalInput = ""
 
     private let planningService = OpenAIPlanningService()
@@ -45,6 +47,11 @@ struct TomorrowPlannerView: View {
             Button("好", role: .cancel) { errorMessage = nil }
         } message: {
             Text(errorMessage ?? "未知错误")
+        }
+        .sheet(item: $editingSuggestion) { suggestion in
+            AISuggestionEditorView(suggestion: suggestion, areas: store.areas) { updated in
+                updateSuggestion(updated)
+            }
         }
     }
 
@@ -294,13 +301,17 @@ struct TomorrowPlannerView: View {
     }
 
     private func suggestionRow(_ suggestion: AISuggestedTask, isFocus: Bool) -> some View {
-        Toggle(isOn: Binding(
-            get: { selectedSuggestionIDs.contains(suggestion.id) },
-            set: { selected in
-                if selected { selectedSuggestionIDs.insert(suggestion.id) }
-                else { selectedSuggestionIDs.remove(suggestion.id) }
-            }
-        )) {
+        HStack(alignment: .top, spacing: 10) {
+            Toggle("选择 \(suggestion.title)", isOn: Binding(
+                get: { selectedSuggestionIDs.contains(suggestion.id) },
+                set: { selected in
+                    if selected { selectedSuggestionIDs.insert(suggestion.id) }
+                    else { selectedSuggestionIDs.remove(suggestion.id) }
+                }
+            ))
+            .labelsHidden()
+            .toggleStyle(.checkbox)
+
             VStack(alignment: .leading, spacing: 4) {
                 HStack {
                     Text(suggestion.title).fontWeight(.medium)
@@ -309,7 +320,6 @@ struct TomorrowPlannerView: View {
                         .padding(.horizontal, 6)
                         .padding(.vertical, 2)
                         .background(.quaternary, in: Capsule())
-                    Spacer()
                     Text("\(suggestion.estimatedMinutes) 分钟")
                         .font(.caption.monospacedDigit())
                         .foregroundStyle(.secondary)
@@ -321,8 +331,16 @@ struct TomorrowPlannerView: View {
                     .font(.caption2)
                     .foregroundStyle(.tertiary)
             }
+            Spacer(minLength: 4)
+            Button {
+                editingSuggestion = suggestion
+            } label: {
+                Label("编辑建议", systemImage: "pencil")
+            }
+            .labelStyle(.iconOnly)
+            .buttonStyle(.borderless)
+            .help("确认前编辑任务内容、分类、优先级和估时")
         }
-        .toggleStyle(.checkbox)
         .accessibilityHint(isFocus ? "明日重点任务" : "额外候选任务")
     }
 
@@ -365,7 +383,7 @@ struct TomorrowPlannerView: View {
                     areas: store.areas,
                     events: calendarService.tomorrowEvents,
                     weeklyPlan: store.currentWeeklyPlan,
-                    sopItems: DailySOPTemplate.planningItems(for: tomorrow),
+                    sopItems: sopStore.planningItems(for: tomorrow),
                     userInputItems: userInputItems
                 )
                 generatedPlan = plan
@@ -376,6 +394,20 @@ struct TomorrowPlannerView: View {
             }
             isGenerating = false
         }
+    }
+
+    private func updateSuggestion(_ updated: AISuggestedTask) {
+        guard var plan = generatedPlan else { return }
+        if let index = plan.topThree.firstIndex(where: { $0.id == updated.id }) {
+            plan.topThree[index] = updated
+        } else if let index = plan.additionalTasks.firstIndex(where: { $0.id == updated.id }) {
+            plan.additionalTasks[index] = updated
+        } else {
+            return
+        }
+        generatedPlan = plan
+        store.store(plan: plan, for: tomorrow)
+        accepted = false
     }
 
     private func accept(_ plan: AIPlanSuggestion) {
@@ -396,6 +428,70 @@ struct TomorrowPlannerView: View {
         case "calendar_preparation": "AI 根据 Calendar 建议"
         case "user_input": "来自你的补充事项 · 确认后创建任务"
         default: "来自任务库"
+        }
+    }
+}
+
+private struct AISuggestionEditorView: View {
+    let areas: [TaskArea]
+    let onSave: (AISuggestedTask) -> Void
+
+    @Environment(\.dismiss) private var dismiss
+    @State private var draft: AISuggestedTask
+
+    init(suggestion: AISuggestedTask, areas: [TaskArea], onSave: @escaping (AISuggestedTask) -> Void) {
+        self.areas = areas
+        self.onSave = onSave
+        _draft = State(initialValue: suggestion)
+    }
+
+    var body: some View {
+        NavigationStack {
+            Form {
+                Section("任务内容") {
+                    TextField("任务标题", text: $draft.title, axis: .vertical)
+                        .lineLimit(1...3)
+                    TextField("规划理由或说明", text: $draft.reason, axis: .vertical)
+                        .lineLimit(2...5)
+                }
+                Section("安排") {
+                    Picker("分类", selection: $draft.area) {
+                        Text("未分类").tag("未分类")
+                        ForEach(areas) { area in Text(area.name).tag(area.name) }
+                    }
+                    Picker("优先级", selection: $draft.priority) {
+                        Text("高").tag("high")
+                        Text("中").tag("medium")
+                        Text("低").tag("low")
+                        Text("无").tag("none")
+                    }
+                    Stepper(value: $draft.estimatedMinutes, in: 5...480, step: 5) {
+                        LabeledContent("预计时长", value: "\(draft.estimatedMinutes) 分钟")
+                    }
+                }
+                Section {
+                    Text("任务来源与内部映射不会被修改；你的编辑会在确认计划时写入任务库。")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+            }
+            .formStyle(.grouped)
+            .navigationTitle("编辑 AI 建议")
+            .frame(minWidth: 480, minHeight: 430)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("取消") { dismiss() }
+                }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("保存") {
+                        draft.title = draft.title.trimmingCharacters(in: .whitespacesAndNewlines)
+                        onSave(draft)
+                        dismiss()
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .disabled(draft.title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                }
+            }
         }
     }
 }

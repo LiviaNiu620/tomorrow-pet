@@ -154,6 +154,7 @@ run_self_tests() {
     "$ROOT_DIR/Sources/TomorrowPet/Services/GoogleCalendarService.swift" \
     "$ROOT_DIR/Sources/TomorrowPet/Services/CalendarService.swift" \
     "$ROOT_DIR/Sources/TomorrowPet/Services/OpenAIPlanningService.swift" \
+    "$ROOT_DIR/Sources/TomorrowPet/Services/OpenAITaskBreakdownService.swift" \
     "$ROOT_DIR/Sources/TomorrowPet/Support/AppNotifications.swift" \
     "$ROOT_DIR/script/SelfTest.swift"
   "$BUILD_ROOT/TomorrowPetSelfTests"

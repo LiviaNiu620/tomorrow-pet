@@ -19,6 +19,7 @@ struct ContentView: View {
                 if destination == .planner {
                     TomorrowPlannerView(
                         store: store,
+                        sopStore: sopStore,
                         calendarService: calendarService,
                         preferences: preferences
                     )
@@ -43,7 +44,13 @@ struct ContentView: View {
                             .id(task.id.uuidString + task.status.rawValue)
                             .inspectorColumnWidth(min: 280, ideal: 330, max: 420)
                     } else {
-                        TaskInspectorView(store: store, task: task)
+                        TaskInspectorView(
+                            store: store,
+                            calendarService: calendarService,
+                            preferences: preferences,
+                            sopStore: sopStore,
+                            task: task
+                        )
                             .id(task.id.uuidString + task.status.rawValue)
                             .inspectorColumnWidth(min: 280, ideal: 330, max: 420)
                     }
@@ -90,6 +97,9 @@ struct ContentView: View {
         }
         .onChange(of: destination) { _, newValue in
             if newValue == .planner || newValue == .weekly || newValue == .sop { selectedTaskID = nil }
+        }
+        .onChange(of: selectedTaskID) { _, newValue in
+            if newValue != nil { showInspector = true }
         }
         .onReceive(NotificationCenter.default.publisher(for: .openTomorrowPlanner)) { _ in
             destination = .planner

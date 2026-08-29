@@ -223,6 +223,7 @@ struct TaskItem: Identifiable, Codable, Hashable {
     var completedAt: Date?
     var recurrence: RecurrenceRule?
     var recurrenceSeriesID: UUID?
+    var parentTaskID: UUID?
     var trashedFromStatus: TaskStatus?
     var deletedAt: Date?
 
@@ -247,6 +248,7 @@ struct TaskItem: Identifiable, Codable, Hashable {
         completedAt: Date? = nil,
         recurrence: RecurrenceRule? = nil,
         recurrenceSeriesID: UUID? = nil,
+        parentTaskID: UUID? = nil,
         trashedFromStatus: TaskStatus? = nil,
         deletedAt: Date? = nil
     ) {
@@ -270,6 +272,7 @@ struct TaskItem: Identifiable, Codable, Hashable {
         self.completedAt = completedAt
         self.recurrence = recurrence
         self.recurrenceSeriesID = recurrenceSeriesID
+        self.parentTaskID = parentTaskID
         self.trashedFromStatus = trashedFromStatus
         self.deletedAt = deletedAt
     }

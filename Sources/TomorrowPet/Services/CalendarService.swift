@@ -9,6 +9,7 @@ final class CalendarService: ObservableObject {
     @Published private(set) var authorizationStatus: EKAuthorizationStatus
     @Published private(set) var tomorrowEvents: [CalendarEventSummary] = []
     @Published private(set) var upcomingWeekEvents: [CalendarEventSummary] = []
+    @Published private(set) var upcomingPlanningEvents: [CalendarEventSummary] = []
     @Published private(set) var isLoading = false
     @Published private(set) var lastSuccessfulSyncAt: Date?
     @Published var errorMessage: String?
@@ -84,6 +85,19 @@ final class CalendarService: ObservableObject {
         defer { isLoading = false }
         let result = await loadEvents(from: start, to: end)
         upcomingWeekEvents = result.events
+        errorMessage = result.errorMessage
+        if hasAnyCalendarAccess { lastSuccessfulSyncAt = .now }
+    }
+
+    func refreshPlanningHorizon(referenceDate: Date = .now, days: Int = 14) async {
+        let calendar = Calendar.current
+        let start = calendar.startOfDay(for: referenceDate)
+        guard let end = calendar.date(byAdding: .day, value: max(1, days), to: start) else { return }
+
+        isLoading = true
+        defer { isLoading = false }
+        let result = await loadEvents(from: start, to: end)
+        upcomingPlanningEvents = result.events
         errorMessage = result.errorMessage
         if hasAnyCalendarAccess { lastSuccessfulSyncAt = .now }
     }

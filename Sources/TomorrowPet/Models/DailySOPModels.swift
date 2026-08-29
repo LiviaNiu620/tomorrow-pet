@@ -28,7 +28,7 @@ struct DailySOPItem: Identifiable, Codable, Hashable {
     }
 }
 
-struct DailySOPSection: Identifiable, Hashable {
+struct DailySOPSection: Identifiable, Codable, Hashable {
     var id: String
     var title: String
     var systemImage: String
@@ -36,13 +36,27 @@ struct DailySOPSection: Identifiable, Hashable {
     var items: [DailySOPItem]
 }
 
+struct DailySOPConfiguration: Codable, Hashable {
+    var dailySections: [DailySOPSection]
+    var sundaySection: DailySOPSection
+    var monthlySection: DailySOPSection
+}
+
 enum DailySOPTemplate {
     static func sections(for date: Date, calendar: Calendar = .current) -> [DailySOPSection] {
-        var result = dailySections
+        sections(for: date, configuration: defaultConfiguration, calendar: calendar)
+    }
+
+    static func sections(
+        for date: Date,
+        configuration: DailySOPConfiguration,
+        calendar: Calendar = .current
+    ) -> [DailySOPSection] {
+        var result = configuration.dailySections
         if calendar.component(.weekday, from: date) == 1 {
-            result.append(sundaySection)
+            result.append(configuration.sundaySection)
             if isLastSundayOfMonth(date, calendar: calendar) {
-                result.append(monthlySection)
+                result.append(configuration.monthlySection)
             }
         }
         return result
@@ -52,6 +66,24 @@ enum DailySOPTemplate {
         sections(for: date, calendar: calendar)
             .flatMap(\.items)
             .filter(\.isPlanningContext)
+    }
+
+    static func planningItems(
+        for date: Date,
+        configuration: DailySOPConfiguration,
+        calendar: Calendar = .current
+    ) -> [DailySOPItem] {
+        sections(for: date, configuration: configuration, calendar: calendar)
+            .flatMap(\.items)
+            .filter(\.isPlanningContext)
+    }
+
+    static var defaultConfiguration: DailySOPConfiguration {
+        DailySOPConfiguration(
+            dailySections: dailySections,
+            sundaySection: sundaySection,
+            monthlySection: monthlySection
+        )
     }
 
     static func isLastSundayOfMonth(_ date: Date, calendar: Calendar = .current) -> Bool {

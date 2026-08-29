@@ -2,6 +2,9 @@ import SwiftUI
 
 struct TaskInspectorView: View {
     @ObservedObject var store: TaskStore
+    @ObservedObject var calendarService: CalendarService
+    @ObservedObject var preferences: AppPreferences
+    @ObservedObject var sopStore: DailySOPStore
     let task: TaskItem
 
     @State private var draft: TaskItem
@@ -10,9 +13,19 @@ struct TaskInspectorView: View {
     @State private var hasReviewDate: Bool
     @State private var hasRecurrenceEndDate: Bool
     @State private var tagsText: String
+    @State private var showBreakdown = false
 
-    init(store: TaskStore, task: TaskItem) {
+    init(
+        store: TaskStore,
+        calendarService: CalendarService,
+        preferences: AppPreferences,
+        sopStore: DailySOPStore,
+        task: TaskItem
+    ) {
         self.store = store
+        self.calendarService = calendarService
+        self.preferences = preferences
+        self.sopStore = sopStore
         self.task = task
         _draft = State(initialValue: task)
         _hasDueDate = State(initialValue: task.dueDate != nil)
@@ -153,6 +166,30 @@ struct TaskInspectorView: View {
                 LabeledContent("来源", value: draft.source.title)
             }
 
+            if let parentID = draft.parentTaskID,
+               let parent = store.task(id: parentID) {
+                Section("关联任务") {
+                    LabeledContent("父任务", value: parent.title)
+                }
+            }
+
+            let childCount = store.tasks.lazy.filter { $0.parentTaskID == draft.id && $0.status != .trashed }.count
+            Section("AI 规划") {
+                if childCount > 0 {
+                    LabeledContent("已拆解步骤", value: "\(childCount) 项")
+                }
+                Button {
+                    save()
+                    showBreakdown = true
+                } label: {
+                    Label(childCount > 0 ? "继续 AI 拆解或补充步骤" : "AI 自动拆解和规划", systemImage: "wand.and.stars")
+                }
+                .buttonStyle(.borderedProminent)
+                Text("AI 会参考任务期限、周期、现有任务、Calendar、本周计划和每日 SOP。生成后可逐项编辑，确认前不会写入任务库。")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+
             Section {
                 Button("保存更改") { save() }
                     .buttonStyle(.borderedProminent)
@@ -183,6 +220,15 @@ struct TaskInspectorView: View {
                 draft.recurrence?.endDate = Calendar.current.date(byAdding: .month, value: 1, to: base) ?? base
             }
             if !enabled { draft.recurrence?.endDate = nil }
+        }
+        .sheet(isPresented: $showBreakdown) {
+            TaskBreakdownSheet(
+                store: store,
+                calendarService: calendarService,
+                preferences: preferences,
+                sopStore: sopStore,
+                task: store.task(id: draft.id) ?? draft
+            )
         }
     }
 
