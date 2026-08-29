@@ -145,7 +145,9 @@ run_self_tests() {
     "$ROOT_DIR/Sources/TomorrowPet/Models/TaskModels.swift" \
     "$ROOT_DIR/Sources/TomorrowPet/Models/PlanningModels.swift" \
     "$ROOT_DIR/Sources/TomorrowPet/Models/GoogleCalendarModels.swift" \
+    "$ROOT_DIR/Sources/TomorrowPet/Models/DailySOPModels.swift" \
     "$ROOT_DIR/Sources/TomorrowPet/Stores/TaskStore.swift" \
+    "$ROOT_DIR/Sources/TomorrowPet/Stores/DailySOPStore.swift" \
     "$ROOT_DIR/Sources/TomorrowPet/Stores/AppPreferences.swift" \
     "$ROOT_DIR/Sources/TomorrowPet/Services/KeychainService.swift" \
     "$ROOT_DIR/Sources/TomorrowPet/Services/GoogleOAuthService.swift" \

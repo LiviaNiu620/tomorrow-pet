@@ -14,6 +14,10 @@ struct MenuBarContentView: View {
             AppWindowActivator.showMainWindow()
             NotificationCenter.default.post(name: .openWeeklyPlanner, object: nil)
         }
+        Button("每日 SOP") {
+            AppWindowActivator.showMainWindow()
+            NotificationCenter.default.post(name: .openDailySOP, object: nil)
+        }
         Button("快速添加任务") {
             AppWindowActivator.showMainWindow()
             NotificationCenter.default.post(name: .showQuickAdd, object: nil)

@@ -20,6 +20,9 @@
 - 每周一至周六晚间提醒与周日晚间周计划提醒
 - 三项目标、周任务选择和未来七天 Calendar 的本周计划页
 - 明日 AI 计划会显示并参考本周目标、周任务与周计划备注
+- 独立“每日 SOP”打卡视图，按日期保存完成状态，不污染普通 Todo 列表
+- 固定早晨、Email、工作、健身、通勤、学习、复盘与睡眠节奏；周日自动追加周计划清单，月末最后一个周日自动追加月度复盘
+- AI 明日计划会把 SOP 时间视为固定占用，避免重复建议日常习惯或把晚间时间安排过载
 - 透明、置顶、可拖动的桌面宠物 `NSPanel`
 - 独立设置窗口，可配置提醒时间、日历账户、AI 模型、API Key 和宠物显隐
 - Light/Dark Mode、自适应系统颜色、键盘菜单和 Reduce Motion 友好设计
@@ -65,6 +68,7 @@ dist/TomorrowPet.app
 3. 在“明日 AI 计划”或“本周计划”中授权 Apple Calendar；也可以按下方步骤连接 Google Calendar。
 4. 在任务中心添加任务，并通过任务详情补充领域、日期和预计时长。
 5. 打开“明日 AI 计划”，让团子生成建议，检查后点击“确认并加入明天”。
+6. 从侧边栏打开“每日 SOP”（快捷键 `⇧⌘S`），按当天时间线打卡；周日和月末会自动出现额外计划清单。
 
 ## 连接 Google Calendar
 
@@ -107,6 +111,7 @@ Responses API 与结构化输出实现依据：
 ## 数据位置
 
 - 任务和计划：`~/Library/Application Support/TomorrowPet/task-store.json`
+- 每日 SOP 打卡：`~/Library/Application Support/TomorrowPet/daily-sop.json`
 - OpenAI API Key：macOS Keychain
 - Google OAuth Client Secret 和令牌：macOS Keychain
 - 提醒偏好、Google Client ID 和日历选择：macOS UserDefaults

@@ -10,7 +10,8 @@ struct OpenAIPlanningService {
         tasks: [TaskItem],
         areas: [TaskArea],
         events: [CalendarEventSummary],
-        weeklyPlan: WeeklyPlan? = nil
+        weeklyPlan: WeeklyPlan? = nil,
+        sopItems: [DailySOPItem] = []
     ) async throws -> AIPlanSuggestion {
         let cleanKey = apiKey.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !cleanKey.isEmpty else { throw PlanningError.missingAPIKey }
@@ -20,7 +21,8 @@ struct OpenAIPlanningService {
             tasks: tasks,
             areas: areas,
             events: events,
-            weeklyPlan: weeklyPlan
+            weeklyPlan: weeklyPlan,
+            sopItems: sopItems
         )
         let body: [String: Any] = [
             "model": model,
@@ -36,6 +38,7 @@ struct OpenAIPlanningService {
                     4. 不要重复任务，不要虚构会议内容，不要替用户修改日历。
                     5. 所有文字使用简体中文，理由具体、简短、不制造内疚。
                     6. 如果提供了本周计划，把周目标和已选周任务作为方向性上下文；它们不能覆盖截止日期、日历约束和合理负荷。
+                    7. daily_sop 是用户已经固定安排的时间和习惯，只用于判断可用时间与负荷；不要把 SOP 项目重复放进 top_three 或 additional_tasks。
                     """
                 ],
                 [
@@ -79,7 +82,8 @@ struct OpenAIPlanningService {
         tasks: [TaskItem],
         areas: [TaskArea],
         events: [CalendarEventSummary],
-        weeklyPlan: WeeklyPlan? = nil
+        weeklyPlan: WeeklyPlan? = nil,
+        sopItems: [DailySOPItem] = []
     ) throws -> String {
         let formatter = ISO8601DateFormatter()
         let areaNames = Dictionary(uniqueKeysWithValues: areas.map { ($0.id, $0.name) })
@@ -127,7 +131,14 @@ struct OpenAIPlanningService {
             "tomorrow": formatter.string(from: Calendar.current.startOfDay(for: tomorrow)),
             "calendar_events": eventPayload,
             "active_tasks": taskPayload,
-            "weekly_plan": weeklyPayload
+            "weekly_plan": weeklyPayload,
+            "daily_sop": sopItems.map { item in
+                [
+                    "time": item.time.map { $0 as Any } ?? NSNull(),
+                    "title": item.title,
+                    "section": item.sectionTitle
+                ] as [String: Any]
+            }
         ]
         let data = try JSONSerialization.data(withJSONObject: payload, options: [.prettyPrinted, .sortedKeys])
         return String(decoding: data, as: UTF8.self)

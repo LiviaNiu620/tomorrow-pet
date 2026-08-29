@@ -158,6 +158,7 @@ struct TaskListView: View {
         case .today: "今天没有安排任务，可以给自己留出休息时间。"
         case .inbox: "所有新任务都已经整理好了。"
         case .trash: "移到垃圾箱的任务会保留在这里，直到你恢复或永久删除。"
+        case .sop: "每日 SOP 使用独立的打卡视图。"
         default: "使用上方输入框快速记录一件事。"
         }
     }

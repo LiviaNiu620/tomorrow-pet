@@ -3,6 +3,7 @@ import Foundation
 extension Notification.Name {
     static let openTomorrowPlanner = Notification.Name("TomorrowPet.openTomorrowPlanner")
     static let openWeeklyPlanner = Notification.Name("TomorrowPet.openWeeklyPlanner")
+    static let openDailySOP = Notification.Name("TomorrowPet.openDailySOP")
     static let showQuickAdd = Notification.Name("TomorrowPet.showQuickAdd")
 }
 

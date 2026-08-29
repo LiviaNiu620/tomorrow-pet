@@ -2,6 +2,7 @@ import SwiftUI
 
 struct ContentView: View {
     @ObservedObject var store: TaskStore
+    @ObservedObject var sopStore: DailySOPStore
     @ObservedObject var preferences: AppPreferences
     @ObservedObject var calendarService: CalendarService
 
@@ -23,6 +24,8 @@ struct ContentView: View {
                     )
                 } else if destination == .weekly {
                     WeeklyPlannerView(store: store, calendarService: calendarService)
+                } else if destination == .sop {
+                    DailySOPView(store: sopStore)
                 } else if let destination {
                     TaskListView(
                         store: store,
@@ -75,7 +78,7 @@ struct ContentView: View {
         .frame(minWidth: 900, minHeight: 620)
         .toolbar {
             ToolbarItem(placement: .primaryAction) {
-                if destination != .planner && destination != .weekly {
+                if destination != .planner && destination != .weekly && destination != .sop {
                     Button {
                         showInspector.toggle()
                     } label: {
@@ -86,7 +89,7 @@ struct ContentView: View {
             }
         }
         .onChange(of: destination) { _, newValue in
-            if newValue == .planner || newValue == .weekly { selectedTaskID = nil }
+            if newValue == .planner || newValue == .weekly || newValue == .sop { selectedTaskID = nil }
         }
         .onReceive(NotificationCenter.default.publisher(for: .openTomorrowPlanner)) { _ in
             destination = .planner
@@ -94,6 +97,10 @@ struct ContentView: View {
         }
         .onReceive(NotificationCenter.default.publisher(for: .openWeeklyPlanner)) { _ in
             destination = .weekly
+            selectedTaskID = nil
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .openDailySOP)) { _ in
+            destination = .sop
             selectedTaskID = nil
         }
         .onReceive(NotificationCenter.default.publisher(for: .showQuickAdd)) { _ in
@@ -108,7 +115,7 @@ struct ContentView: View {
 
     private var inspectorBinding: Binding<Bool> {
         Binding(
-            get: { destination != .planner && destination != .weekly && showInspector },
+            get: { destination != .planner && destination != .weekly && destination != .sop && showInspector },
             set: { showInspector = $0 }
         )
     }

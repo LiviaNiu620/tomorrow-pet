@@ -297,6 +297,7 @@ struct TaskItem: Identifiable, Codable, Hashable {
 enum SidebarDestination: Hashable, Identifiable {
     case planner
     case weekly
+    case sop
     case inbox
     case all
     case today
@@ -313,6 +314,7 @@ enum SidebarDestination: Hashable, Identifiable {
         switch self {
         case .planner: "planner"
         case .weekly: "weekly"
+        case .sop: "sop"
         case .inbox: "inbox"
         case .all: "all"
         case .today: "today"
@@ -331,6 +333,7 @@ enum SidebarDestination: Hashable, Identifiable {
         switch self {
         case .planner: "明日 AI 计划"
         case .weekly: "本周计划"
+        case .sop: "每日 SOP"
         case .inbox: "收件箱"
         case .all: "全部任务"
         case .today: "今天"

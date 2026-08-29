@@ -66,6 +66,8 @@ final class TaskStore: ObservableObject {
                 return false
             case .weekly:
                 return false
+            case .sop:
+                return false
             case .inbox:
                 return task.status == .inbox
             case .all:

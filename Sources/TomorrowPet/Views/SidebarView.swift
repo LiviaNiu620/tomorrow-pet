@@ -9,6 +9,7 @@ struct SidebarView: View {
             Section("计划") {
                 sidebarRow(.planner, icon: "sparkles", count: nil)
                 sidebarRow(.weekly, icon: "calendar.badge.clock", count: nil)
+                sidebarRow(.sop, icon: "checklist.checked", count: nil)
                 sidebarRow(.today, icon: "sun.max", count: store.count(for: .today))
                 sidebarRow(.tomorrow, icon: "sunrise", count: store.count(for: .tomorrow))
             }

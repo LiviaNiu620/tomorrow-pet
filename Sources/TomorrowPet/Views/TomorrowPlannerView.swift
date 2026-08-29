@@ -314,7 +314,8 @@ struct TomorrowPlannerView: View {
                     tasks: store.activeTasks,
                     areas: store.areas,
                     events: calendarService.tomorrowEvents,
-                    weeklyPlan: store.currentWeeklyPlan
+                    weeklyPlan: store.currentWeeklyPlan,
+                    sopItems: DailySOPTemplate.planningItems(for: tomorrow)
                 )
                 generatedPlan = plan
                 selectedSuggestionIDs = Set((plan.topThree + plan.additionalTasks).map(\.id))

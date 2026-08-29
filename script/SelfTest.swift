@@ -20,8 +20,11 @@ struct TomorrowPetSelfTests {
         try testMultipleUndoSteps()
         try testPromptIncludesCalendarSource()
         try testPromptIncludesWeeklyPlan()
+        try testPromptIncludesDailySOP()
+        try testDailySOPScheduleVariants()
+        try testDailySOPCompletionIsolation()
         try testLegacyTaskDecoding()
-        print("TomorrowPet self-tests passed: 17/17")
+        print("TomorrowPet self-tests passed: 20/20")
     }
 
     private static func testHorizonClassification() throws {
@@ -295,6 +298,62 @@ struct TomorrowPetSelfTests {
         try expect(payload.contains("交付可试用版本"), "AI prompt must include weekly goals")
         try expect(payload.contains("推进 Beta"), "AI prompt must resolve selected weekly task titles")
         try expect(payload.contains("weekly_plan"), "AI prompt must label weekly context")
+    }
+
+    private static func testPromptIncludesDailySOP() throws {
+        let items = DailySOPTemplate.planningItems(for: .now)
+        let payload = try OpenAIPlanningService().promptPayload(
+            tomorrow: .now,
+            tasks: [],
+            areas: [],
+            events: [],
+            sopItems: items
+        )
+        try expect(payload.contains("daily_sop"), "Prompt must label daily SOP context")
+        try expect(payload.contains("20:20–22:00"), "Prompt must include fixed evening focus time")
+        try expect(payload.contains("个人学习和自己的工作"), "Prompt must include the SOP commitment title")
+    }
+
+    private static func testDailySOPScheduleVariants() throws {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = try require(TimeZone(identifier: "America/Los_Angeles"))
+        let weekday = try require(calendar.date(from: DateComponents(year: 2026, month: 8, day: 27)))
+        let lastSunday = try require(calendar.date(from: DateComponents(year: 2026, month: 8, day: 30)))
+
+        let weekdayIDs = Set(DailySOPTemplate.sections(for: weekday, calendar: calendar).map(\.id))
+        try expect(!weekdayIDs.contains("sunday"), "Weekday SOP must not include Sunday planning")
+        try expect(!weekdayIDs.contains("monthly"), "Weekday SOP must not include monthly planning")
+
+        let sundayIDs = Set(DailySOPTemplate.sections(for: lastSunday, calendar: calendar).map(\.id))
+        try expect(sundayIDs.contains("sunday"), "Sunday SOP must include weekly planning")
+        try expect(sundayIDs.contains("monthly"), "Last Sunday must include monthly planning")
+        let sundayItems = DailySOPTemplate.sections(for: lastSunday, calendar: calendar).flatMap(\.items)
+        try expect(
+            Set(sundayItems.map(\.id)).count == sundayItems.count,
+            "SOP item IDs must remain unique when weekly and monthly sections are appended"
+        )
+        try expect(
+            DailySOPTemplate.isLastSundayOfMonth(lastSunday, calendar: calendar),
+            "Last-Sunday detection failed"
+        )
+    }
+
+    @MainActor
+    private static func testDailySOPCompletionIsolation() throws {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = try require(TimeZone(identifier: "UTC"))
+        let firstDay = try require(calendar.date(from: DateComponents(year: 2026, month: 8, day: 27)))
+        let secondDay = try require(calendar.date(byAdding: .day, value: 1, to: firstDay))
+        let store = DailySOPStore(
+            fileURL: FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString),
+            persistsChanges: false
+        )
+
+        store.setCompleted("wake", completed: true, on: firstDay, calendar: calendar)
+        try expect(store.isCompleted("wake", on: firstDay, calendar: calendar), "SOP item must be checked on its date")
+        try expect(!store.isCompleted("wake", on: secondDay, calendar: calendar), "SOP completion must not leak into another date")
+        store.reset(date: firstDay, calendar: calendar)
+        try expect(!store.isCompleted("wake", on: firstDay, calendar: calendar), "SOP reset must clear only that day")
     }
 
     private static func testLegacyTaskDecoding() throws {

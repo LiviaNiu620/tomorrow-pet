@@ -5,6 +5,7 @@ import SwiftUI
 struct TomorrowPetApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
     @StateObject private var store = TaskStore.shared
+    @StateObject private var sopStore = DailySOPStore.shared
     @StateObject private var preferences = AppPreferences.shared
     @StateObject private var calendarService = CalendarService.shared
     @StateObject private var googleCalendarService = GoogleCalendarService.shared
@@ -13,6 +14,7 @@ struct TomorrowPetApp: App {
         WindowGroup(AppConstants.name, id: "main") {
             ContentView(
                 store: store,
+                sopStore: sopStore,
                 preferences: preferences,
                 calendarService: calendarService
             )
@@ -37,6 +39,11 @@ struct TomorrowPetApp: App {
                     NotificationCenter.default.post(name: .openTomorrowPlanner, object: nil)
                 }
                 .keyboardShortcut("p", modifiers: [.command, .shift])
+
+                Button("打开每日 SOP") {
+                    NotificationCenter.default.post(name: .openDailySOP, object: nil)
+                }
+                .keyboardShortcut("s", modifiers: [.command, .shift])
             }
         }
 
