@@ -17,22 +17,36 @@ struct TomorrowPlannerView: View {
     private let planningService = OpenAIPlanningService()
 
     var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 20) {
-                header
-                calendarCard
-                weeklyDirectionCard
-                additionalInputCard
-                taskCandidatesCard
-
-                if let generatedPlan {
-                    planCard(generatedPlan)
-                } else {
-                    generateCard
+        GeometryReader { geometry in
+            ScrollView {
+                VStack(alignment: .leading, spacing: 24) {
+                    header
+                    LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 12), count: geometry.size.width < 600 ? 1 : 3), spacing: 12) {
+                        PetMetric(title: "固定日程", value: calendarService.hasAnyCalendarAccess ? "\(calendarService.tomorrowEvents.count) 项" : "未连接", systemImage: "calendar")
+                        PetMetric(title: "任务候选", value: "\(candidateTasks.count) 项", systemImage: "checklist")
+                        PetMetric(title: "明日重点", value: "最多 3 项", systemImage: "scope", color: AppTheme.accent)
+                    }
+                    PetAdaptiveColumns(availableWidth: geometry.size.width) {
+                        VStack(alignment: .leading, spacing: 20) {
+                            additionalInputCard
+                            if let generatedPlan {
+                                planCard(generatedPlan)
+                            } else {
+                                generateCard
+                            }
+                        }
+                    } secondary: {
+                        VStack(alignment: .leading, spacing: 20) {
+                            calendarCard
+                            weeklyDirectionCard
+                            taskCandidatesCard
+                        }
+                    }
                 }
+                .padding(AppTheme.pageInset)
+                .frame(maxWidth: 1120, alignment: .leading)
+                .frame(maxWidth: .infinity, alignment: .top)
             }
-            .padding(24)
-            .frame(maxWidth: 900, alignment: .leading)
         }
         .navigationTitle("明日 AI 计划")
         .task {
@@ -56,17 +70,11 @@ struct TomorrowPlannerView: View {
     }
 
     private var header: some View {
-        HStack(spacing: 16) {
-            PetFaceView(mood: .planning)
-                .frame(width: 74, height: 74)
-
-            VStack(alignment: .leading, spacing: 5) {
-                Text("一起安排明天")
-                    .font(.largeTitle.bold())
-                Text("\(tomorrow.formatted(date: .complete, time: .omitted)) · AI 会参考 Calendar、任务库和你的补充事项，但只有你确认后才会保存。")
-                    .foregroundStyle(.secondary)
-            }
-        }
+        PetPageHeader(
+            eyebrow: tomorrow.formatted(date: .complete, time: .omitted),
+            title: "给明天，留一点从容。",
+            subtitle: "选好三个重点，给重要的事留出时间。计划由你确认后保存。"
+        )
     }
 
     private var calendarCard: some View {
@@ -75,13 +83,13 @@ struct TomorrowPlannerView: View {
                 if calendarService.isLoading {
                     ProgressView("正在读取 Calendar…")
                 } else if !calendarService.hasAnyCalendarAccess {
-                    Text("连接 Apple 或 Google Calendar 后，团子才能看见明天的时间占用。发送给 OpenAI 的内容不包含参与者、地址或会议链接。")
+                    Text("连接日历，把固定安排一起纳入计划。也可以直接根据任务库开始规划。")
                         .foregroundStyle(.secondary)
-                    HStack {
-                        Button("授权 Apple Calendar") {
+                    VStack(alignment: .leading, spacing: 10) {
+                        Button("连接 Apple Calendar") {
                             Task { await calendarService.requestAppleAccessAndRefresh() }
                         }
-                        .buttonStyle(.borderedProminent)
+                        .buttonStyle(.bordered)
                         SettingsLink {
                             Label("连接 Google Calendar", systemImage: "globe")
                         }
@@ -160,6 +168,7 @@ struct TomorrowPlannerView: View {
                     TextEditor(text: $additionalInput)
                         .font(.body)
                         .frame(minHeight: 96, maxHeight: 150)
+                        .accessibilityLabel("明日补充事项")
                         .scrollContentBackground(.hidden)
                         .padding(6)
                         .background(.quaternary.opacity(0.35), in: RoundedRectangle(cornerRadius: 8))
@@ -225,7 +234,9 @@ struct TomorrowPlannerView: View {
     private var generateCard: some View {
         GroupBox {
             VStack(alignment: .leading, spacing: 12) {
-                Text("OpenAI 会选出最多三项重点，逐条保留你的补充事项，并说明原因、预计用时和明日负荷。API Key 初始为空，需要在设置中填写。")
+                Label("把精力留给最重要的事", systemImage: "sparkles")
+                    .font(.title3.weight(.semibold))
+                Text("结合任务、日历与每日节奏，为你挑选重点并估算用时。生成后可以编辑和取舍。")
                     .foregroundStyle(.secondary)
 
                 HStack {
@@ -233,18 +244,25 @@ struct TomorrowPlannerView: View {
                         generatePlan()
                     } label: {
                         if isGenerating {
-                            ProgressView().controlSize(.small)
+                            HStack(spacing: 8) {
+                                ProgressView().controlSize(.small)
+                                Text("正在规划明天…")
+                            }
                         } else {
-                            Label("让团子规划明天", systemImage: "sparkles")
+                            Label("生成明日计划", systemImage: "sparkles")
                         }
                     }
                     .buttonStyle(.borderedProminent)
-                    .disabled(isGenerating)
+                    .controlSize(.large)
+                    .disabled(isGenerating || additionalInputLineCount > 20)
 
                     SettingsLink {
-                        Label("打开 AI 设置", systemImage: "key")
+                        Label("AI 设置", systemImage: "slider.horizontal.3")
                     }
                 }
+                Text("首次使用请在 AI 设置中填写 API Key。")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
             }
             .frame(maxWidth: .infinity, alignment: .leading)
         }
@@ -284,10 +302,10 @@ struct TomorrowPlannerView: View {
                         accept(plan)
                     }
                     .buttonStyle(.borderedProminent)
-                    .disabled(accepted || selectedSuggestionIDs.isEmpty)
+                    .disabled(accepted || isGenerating || selectedSuggestionIDs.isEmpty)
 
-                    Button("重新生成") { generatePlan() }
-                        .disabled(isGenerating)
+                    Button(isGenerating ? "正在重新生成…" : "重新生成") { generatePlan() }
+                        .disabled(isGenerating || additionalInputLineCount > 20)
 
                     Spacer()
                     Text("已选择 \(selectedSuggestionIDs.count) 项")
@@ -296,7 +314,7 @@ struct TomorrowPlannerView: View {
             }
             .frame(maxWidth: .infinity, alignment: .leading)
         } label: {
-            Label("团子的建议", systemImage: "sparkles")
+            Label("团子的明日建议", systemImage: "sparkles")
         }
     }
 
@@ -313,8 +331,9 @@ struct TomorrowPlannerView: View {
             .toggleStyle(.checkbox)
 
             VStack(alignment: .leading, spacing: 4) {
+                Text(suggestion.title).fontWeight(.medium)
+                    .fixedSize(horizontal: false, vertical: true)
                 HStack {
-                    Text(suggestion.title).fontWeight(.medium)
                     Text(suggestion.area)
                         .font(.caption)
                         .padding(.horizontal, 6)
@@ -340,6 +359,7 @@ struct TomorrowPlannerView: View {
             .labelStyle(.iconOnly)
             .buttonStyle(.borderless)
             .help("确认前编辑任务内容、分类、优先级和估时")
+            .disabled(isGenerating)
         }
         .accessibilityHint(isFocus ? "明日重点任务" : "额外候选任务")
     }

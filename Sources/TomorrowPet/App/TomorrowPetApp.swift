@@ -18,6 +18,7 @@ struct TomorrowPetApp: App {
                 preferences: preferences,
                 calendarService: calendarService
             )
+            .tint(AppTheme.accent)
         }
         .defaultSize(width: 1180, height: 760)
         .commands {
@@ -47,7 +48,7 @@ struct TomorrowPetApp: App {
             }
         }
 
-        MenuBarExtra(AppConstants.name, systemImage: "pawprint.fill") {
+        MenuBarExtra(AppConstants.name, systemImage: "dog.fill") {
             MenuBarContentView()
         }
 

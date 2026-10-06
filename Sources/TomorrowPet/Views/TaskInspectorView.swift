@@ -14,6 +14,7 @@ struct TaskInspectorView: View {
     @State private var hasRecurrenceEndDate: Bool
     @State private var tagsText: String
     @State private var showBreakdown = false
+    @State private var lastSavedDraft: TaskItem
 
     init(
         store: TaskStore,
@@ -28,6 +29,7 @@ struct TaskInspectorView: View {
         self.sopStore = sopStore
         self.task = task
         _draft = State(initialValue: task)
+        _lastSavedDraft = State(initialValue: task)
         _hasDueDate = State(initialValue: task.dueDate != nil)
         _hasPlannedDate = State(initialValue: task.plannedDate != nil)
         _hasReviewDate = State(initialValue: task.reviewDate != nil)
@@ -191,10 +193,6 @@ struct TaskInspectorView: View {
             }
 
             Section {
-                Button("保存更改") { save() }
-                    .buttonStyle(.borderedProminent)
-                    .disabled(draft.title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-
                 Button("移到垃圾箱", role: .destructive) {
                     store.delete([draft.id])
                 }
@@ -202,6 +200,20 @@ struct TaskInspectorView: View {
         }
         .formStyle(.grouped)
         .padding(.vertical, 8)
+        .safeAreaInset(edge: .bottom, spacing: 0) {
+            HStack(spacing: 12) {
+                Label(hasChanges ? "尚未保存" : "已保存", systemImage: hasChanges ? "pencil.circle" : "checkmark.circle")
+                    .font(.caption)
+                    .foregroundStyle(hasChanges ? Color.secondary : AppTheme.success)
+                Spacer(minLength: 0)
+                Button("保存更改") { save() }
+                    .buttonStyle(.borderedProminent)
+                    .disabled(!hasChanges || draft.title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+            }
+            .padding(16)
+            .background(.bar)
+            .overlay(alignment: .top) { Divider() }
+        }
         .onChange(of: hasDueDate) { _, enabled in
             if enabled && draft.dueDate == nil { draft.dueDate = .now }
             if !enabled { draft.dueDate = nil }
@@ -284,6 +296,10 @@ struct TaskInspectorView: View {
         ("一", 2), ("二", 3), ("三", 4), ("四", 5), ("五", 6), ("六", 7), ("日", 1)
     ]
 
+    private var hasChanges: Bool {
+        draft != lastSavedDraft || tagsText != lastSavedDraft.tags.joined(separator: ", ")
+    }
+
     private func save() {
         draft.title = draft.title.trimmingCharacters(in: .whitespacesAndNewlines)
         draft.tags = tagsText
@@ -292,7 +308,9 @@ struct TaskInspectorView: View {
             .filter { !$0.isEmpty }
         if draft.status == .completed && draft.completedAt == nil { draft.completedAt = .now }
         if draft.status != .completed { draft.completedAt = nil }
-        store.update(draft)
+        if store.task(id: draft.id) != draft { store.update(draft) }
+        tagsText = draft.tags.joined(separator: ", ")
+        lastSavedDraft = draft
     }
 }
 

@@ -24,7 +24,7 @@ final class ReminderService: NSObject, UNUserNotificationCenterDelegate {
 
         for weekday in 2...7 {
             let content = UNMutableNotificationContent()
-            content.title = "团子来找你安排明天了"
+            content.title = "史努比来找你安排明天了"
             content.body = "看看明天的 Calendar，用 AI 选出最重要的三件事。"
             content.sound = .default
             content.userInfo = ["route": "planner"]

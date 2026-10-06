@@ -65,7 +65,20 @@ struct SettingsView: View {
             }
 
             Section("桌面宠物") {
-                Toggle("显示桌面团子", isOn: $preferences.petEnabled)
+                HStack(spacing: 14) {
+                    PetFaceView(mood: .happy)
+                        .frame(width: 54, height: 54)
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("桌面史努比")
+                            .font(.headline)
+                        Text("始终浮在桌面上，点击即可快速添加或规划。")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                    Spacer()
+                    Toggle("显示桌面史努比", isOn: $preferences.petEnabled)
+                        .labelsHidden()
+                }
                     .onChange(of: preferences.petEnabled) { _, enabled in
                         NotificationCenter.default.post(name: .petVisibilityChanged, object: enabled)
                     }
@@ -78,6 +91,7 @@ struct SettingsView: View {
             }
         }
         .formStyle(.grouped)
+        .tint(AppTheme.accent)
     }
 
     private var calendarTab: some View {

@@ -6,11 +6,20 @@ struct PetPanelView: View {
     @State private var quickTask = ""
 
     var body: some View {
-        VStack(alignment: .trailing, spacing: 8) {
+        VStack(alignment: .trailing, spacing: 10) {
             if isExpanded {
-                VStack(alignment: .leading, spacing: 10) {
+                VStack(alignment: .leading, spacing: 13) {
+                    HStack(spacing: 9) {
+                        Circle()
+                            .fill(AppTheme.accent)
+                            .frame(width: 8, height: 8)
+                        Text("史努比的小纸条")
+                            .font(.caption.weight(.semibold))
+                            .foregroundStyle(.secondary)
+                    }
+
                     Text(petMessage)
-                        .font(.callout.weight(.medium))
+                        .font(.callout.weight(.semibold))
                         .fixedSize(horizontal: false, vertical: true)
 
                     HStack {
@@ -18,9 +27,10 @@ struct PetPanelView: View {
                             .textFieldStyle(.roundedBorder)
                             .onSubmit(addTask)
                         Button(action: addTask) {
-                            Image(systemName: "plus")
+                            Image(systemName: "arrow.up")
                         }
                         .buttonStyle(.borderedProminent)
+                        .tint(AppTheme.accent)
                         .disabled(quickTask.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
                         .accessibilityLabel("添加任务")
                     }
@@ -31,23 +41,30 @@ struct PetPanelView: View {
                             NotificationCenter.default.post(name: .openTomorrowPlanner, object: nil)
                         }
                         .buttonStyle(.borderedProminent)
+                        .tint(AppTheme.accent)
 
                         Button("任务中心") {
                             AppWindowActivator.showMainWindow()
                         }
                     }
 
-                    Button("本周计划") {
+                    Button {
                         AppWindowActivator.showMainWindow()
                         NotificationCenter.default.post(name: .openWeeklyPlanner, object: nil)
+                    } label: {
+                        Label("查看本周计划", systemImage: "calendar.badge.clock")
                     }
                     .buttonStyle(.plain)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(AppTheme.sky)
                 }
-                .padding(12)
-                .frame(width: 270)
-                .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 16))
-                .overlay(RoundedRectangle(cornerRadius: 16).stroke(.white.opacity(0.3)))
+                .padding(16)
+                .frame(width: 286)
+                .background(.ultraThickMaterial, in: RoundedRectangle(cornerRadius: 20, style: .continuous))
+                .overlay {
+                    RoundedRectangle(cornerRadius: 20, style: .continuous)
+                        .stroke(.white.opacity(0.35), lineWidth: 0.8)
+                }
+                .shadow(color: .black.opacity(0.16), radius: 20, y: 8)
                 .transition(.opacity.combined(with: .move(edge: .bottom)))
             }
 
@@ -57,14 +74,14 @@ struct PetPanelView: View {
                 }
             } label: {
                 PetFaceView(mood: tomorrowCount > 0 ? .planning : .idle)
-                    .frame(width: 92, height: 92)
+                    .frame(width: 106, height: 106)
                     .contentShape(Circle())
             }
             .buttonStyle(.plain)
-            .accessibilityLabel(isExpanded ? "收起团子" : "打开团子")
+            .accessibilityLabel(isExpanded ? "收起史努比" : "打开史努比")
         }
         .padding(8)
-        .frame(width: 300, height: 260, alignment: .bottomTrailing)
+        .frame(width: 320, height: 300, alignment: .bottomTrailing)
     }
 
     private var tomorrowCount: Int {
@@ -73,7 +90,7 @@ struct PetPanelView: View {
 
     private var petMessage: String {
         if tomorrowCount == 0 {
-            return "明天还没有选重点。要不要看看 Calendar，一起安排三件最重要的事？"
+            return "明天还没有选重点。让我看看 Calendar，陪你挑出三件最重要的事吧。"
         }
         return "明天已经安排了 \(tomorrowCount) 项任务。还需要调整吗？"
     }

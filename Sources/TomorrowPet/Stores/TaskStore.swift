@@ -101,7 +101,8 @@ final class TaskStore: ObservableObject {
         areaID: UUID? = nil,
         horizon: TaskHorizon? = nil,
         plannedDate: Date? = nil,
-        source: TaskSource = .manual
+        source: TaskSource = .manual,
+        initialStatus: TaskStatus? = nil
     ) -> TaskItem? {
         let cleanTitle = title.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !cleanTitle.isEmpty else { return nil }
@@ -110,7 +111,7 @@ final class TaskStore: ObservableObject {
         let task = TaskItem(
             title: cleanTitle,
             areaID: areaID,
-            status: plannedDate == nil ? .inbox : .planned,
+            status: initialStatus ?? (plannedDate == nil ? .inbox : .planned),
             manualHorizon: horizon,
             plannedDate: plannedDate,
             source: source
@@ -118,6 +119,29 @@ final class TaskStore: ObservableObject {
         tasks.insert(task, at: 0)
         save()
         return task
+    }
+
+    /// A quick entry should remain visible in the list where it was created.
+    @discardableResult
+    func addTask(title: String, areaID: UUID?, in destination: SidebarDestination, referenceDate: Date = .now) -> TaskItem? {
+        let calendar = Calendar.current
+        var plannedDate: Date?
+        var horizon: TaskHorizon?
+        switch destination {
+        case .today: plannedDate = calendar.startOfDay(for: referenceDate)
+        case .tomorrow: plannedDate = calendar.date(byAdding: .day, value: 1, to: calendar.startOfDay(for: referenceDate))
+        case .immediate: horizon = .immediate
+        case .shortTerm: horizon = .shortTerm
+        case .longTerm: horizon = .longTerm
+        default: break
+        }
+        return addTask(
+            title: title,
+            areaID: areaID,
+            horizon: horizon,
+            plannedDate: plannedDate,
+            initialStatus: destination == .waiting ? .waiting : nil
+        )
     }
 
     func update(_ task: TaskItem) {

@@ -81,7 +81,7 @@ struct TaskBreakdownSheet: View {
     private var generateView: some View {
         GroupBox {
             VStack(alignment: .leading, spacing: 12) {
-                Text("团子会生成 3–12 个带完成标准、估时、计划日期和依赖关系的步骤。所有步骤先进入预览，你可以修改、删除或补充。")
+                Text("史努比会生成 3–12 个带完成标准、估时、计划日期和依赖关系的步骤。所有步骤先进入预览，你可以修改、删除或补充。")
                     .foregroundStyle(.secondary)
                 HStack {
                     Button {

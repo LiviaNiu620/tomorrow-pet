@@ -33,7 +33,25 @@ struct TomorrowPetSelfTests {
         try testBreakdownResponseDecodingAndValidation()
         try testBreakdownCreatesLinkedTasksWithoutDuplicates()
         try testLegacyTaskDecoding()
-        print("TomorrowPet self-tests passed: 30/30")
+        try testQuickAddStaysInDestinationAndUndoesOnce()
+        print("TomorrowPet self-tests passed: 31/31")
+    }
+
+    private static func testQuickAddStaysInDestinationAndUndoesOnce() throws {
+        let reference = try require(Calendar.current.date(from: DateComponents(year: 2026, month: 10, day: 5)))
+        let areaID = TaskArea.defaults[0].id
+        let destinations: [SidebarDestination] = [.inbox, .all, .today, .tomorrow, .immediate, .shortTerm, .longTerm, .waiting, .area(areaID)]
+        for destination in destinations {
+            let store = TaskStore(fileURL: FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString), persistsChanges: false)
+            let task = try require(store.addTask(title: "  当前视图的新任务  ", areaID: areaID, in: destination, referenceDate: reference))
+            try expect(store.tasks(for: destination, referenceDate: reference).contains(where: { $0.id == task.id }), "Quick add must appear in \(destination.title)")
+            try expect(task.title == "当前视图的新任务", "Quick add must trim the title")
+            try expect(task.areaID == areaID, "Quick add must preserve the selected area")
+            store.undoLastAction()
+            try expect(store.tasks.isEmpty, "One undo must remove the quick-added task")
+            try expect(!store.canUndo, "Quick add must create a single undo entry")
+            try expect(store.addTask(title: "  ", areaID: nil, in: destination) == nil, "Empty titles must not create tasks")
+        }
     }
 
     private static func testHorizonClassification() throws {

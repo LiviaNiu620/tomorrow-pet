@@ -4,6 +4,7 @@ struct TaskListView: View {
     @ObservedObject var store: TaskStore
     let destination: SidebarDestination
     @Binding var selectedTaskID: UUID?
+    var quickAddRequest: UUID
 
     @State private var searchText = ""
     @State private var priorityFilter: TaskPriority?
@@ -13,19 +14,41 @@ struct TaskListView: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            if destination != .trash {
-                QuickAddView(store: store, defaultAreaID: defaultAreaID) { id in
+            listHeader
+            if destination != .trash && destination != .completed {
+                QuickAddView(store: store, destination: destination, focusRequest: quickAddRequest) { id in
+                    clearFilters()
                     selectedTaskID = id
                 }
-                .padding([.horizontal, .top])
+                .padding(.horizontal, 24)
+                .padding(.bottom, 16)
             }
+            if hasFilters {
+                HStack(spacing: 10) {
+                    Label("筛选结果 \(filteredTasks.count) 项", systemImage: "line.3.horizontal.decrease.circle")
+                        .foregroundStyle(.secondary)
+                    if let priorityFilter {
+                        Text("\(priorityFilter.title)优先级")
+                            .foregroundStyle(AppTheme.priority(priorityFilter))
+                    }
+                    Spacer()
+                    Button("清除筛选", action: clearFilters)
+                        .buttonStyle(.borderless)
+                }
+                .font(.caption)
+                .padding(.horizontal, 24)
+                .padding(.bottom, 12)
+            }
+            Divider().opacity(0.5)
 
             if filteredTasks.isEmpty {
-                ContentUnavailableView(
-                    emptyTitle,
-                    systemImage: emptyIcon,
-                    description: Text(emptyDescription)
-                )
+                VStack(spacing: 0) {
+                    PetEmptyState(title: emptyTitle, description: emptyDescription, systemImage: emptyIcon)
+                    if hasFilters {
+                        Button("显示全部任务", action: clearFilters)
+                            .buttonStyle(.bordered)
+                    }
+                }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else {
                 List(selection: $selectedTaskID) {
@@ -75,6 +98,10 @@ struct TaskListView: View {
                     }
                 }
                 .listStyle(.inset)
+                .scrollContentBackground(.hidden)
+                .safeAreaInset(edge: .bottom, spacing: 0) {
+                    Color.clear.frame(height: store.undoAction == nil ? 0 : 64)
+                }
             }
         }
         .navigationTitle(destinationTitle)
@@ -82,13 +109,14 @@ struct TaskListView: View {
         .toolbar {
             ToolbarItemGroup {
                 Menu {
-                    Button("全部优先级") { priorityFilter = nil }
-                    Divider()
-                    ForEach(TaskPriority.allCases.filter { $0 != .none }) { priority in
-                        Button(priority.title) { priorityFilter = priority }
+                    Picker("优先级", selection: $priorityFilter) {
+                        Text("全部优先级").tag(TaskPriority?.none)
+                        ForEach(TaskPriority.allCases) { priority in
+                            Text("\(priority.title)优先级").tag(TaskPriority?.some(priority))
+                        }
                     }
                 } label: {
-                    Label("筛选优先级", systemImage: "line.3.horizontal.decrease.circle")
+                    Label("筛选优先级", systemImage: priorityFilter == nil ? "line.3.horizontal.decrease.circle" : "line.3.horizontal.decrease.circle.fill")
                 }
 
                 if destination == .trash && !filteredTasks.isEmpty {
@@ -100,6 +128,7 @@ struct TaskListView: View {
                 }
             }
         }
+        .onChange(of: destination) { _, _ in clearFilters() }
         .alert("永久删除任务？", isPresented: $showPermanentDeleteConfirmation) {
             Button("取消", role: .cancel) { pendingPermanentDeletion = [] }
             Button("永久删除", role: .destructive) {
@@ -132,9 +161,43 @@ struct TaskListView: View {
         }
     }
 
-    private var defaultAreaID: UUID? {
-        if case .area(let areaID) = destination { return areaID }
-        return nil
+    private var listHeader: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(alignment: .firstTextBaseline) {
+                Text(destinationTitle)
+                    .font(.system(size: 26, weight: .bold, design: .rounded))
+                    .accessibilityAddTraits(.isHeader)
+                Spacer()
+                Text("\(store.count(for: destination)) 项")
+                    .font(.callout.monospacedDigit())
+                    .foregroundStyle(.secondary)
+            }
+            Text(destinationSubtitle)
+                .font(.callout)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .padding(24)
+    }
+
+    private var destinationSubtitle: String {
+        switch destination {
+        case .today: "把注意力放回今天，一次完成一件事。"
+        case .tomorrow: "提前安排，让明天开始得更轻松。"
+        case .inbox: "先记下来，再慢慢理清。"
+        case .longTerm: "给长远的目标，留一个清晰的下一步。"
+        case .waiting: "记录等待中的进展，适时跟进。"
+        case .completed: "每一件完成的小事，都在推动你向前。"
+        case .trash: "误删的任务可以恢复，永久删除前会再次确认。"
+        default: "整理要做的事，为重要的事留出空间。"
+        }
+    }
+
+    private var hasFilters: Bool { !searchText.isEmpty || priorityFilter != nil }
+
+    private func clearFilters() {
+        searchText = ""
+        priorityFilter = nil
     }
 
     private var destinationTitle: String {
@@ -145,19 +208,22 @@ struct TaskListView: View {
     }
 
     private var emptyTitle: String {
+        if hasFilters { return "没有找到匹配的任务" }
         if destination == .completed { return "还没有已完成任务" }
         if destination == .trash { return "垃圾箱是空的" }
         return "这里暂时没有任务"
     }
 
     private var emptyIcon: String {
+        if hasFilters { return "magnifyingglass" }
         if destination == .completed { return "checkmark.circle" }
         if destination == .trash { return "trash" }
         return "checklist"
     }
 
     private var emptyDescription: String {
-        switch destination {
+        if hasFilters { return "试试其他关键词，或清除筛选查看全部任务。" }
+        return switch destination {
         case .longTerm: "添加一个长期事项，并为它设置下一步或复查日期。"
         case .today: "今天没有安排任务，可以给自己留出休息时间。"
         case .inbox: "所有新任务都已经整理好了。"

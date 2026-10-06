@@ -9,11 +9,12 @@ struct ContentView: View {
     @State private var destination: SidebarDestination? = .planner
     @State private var selectedTaskID: UUID?
     @State private var showInspector = true
+    @State private var quickAddRequest = UUID()
 
     var body: some View {
         NavigationSplitView {
             SidebarView(store: store, selection: $destination)
-                .navigationSplitViewColumnWidth(min: 180, ideal: 210, max: 260)
+                .navigationSplitViewColumnWidth(min: 200, ideal: 224, max: 260)
         } detail: {
             Group {
                 if destination == .planner {
@@ -31,12 +32,15 @@ struct ContentView: View {
                     TaskListView(
                         store: store,
                         destination: destination,
-                        selectedTaskID: $selectedTaskID
+                        selectedTaskID: $selectedTaskID,
+                        quickAddRequest: quickAddRequest
                     )
                 } else {
                     ContentUnavailableView("选择一个视图", systemImage: "sidebar.left")
                 }
             }
+            .background(PetDetailBackground())
+            .groupBoxStyle(PetGroupBoxStyle())
             .inspector(isPresented: inspectorBinding) {
                 if let task = store.task(id: selectedTaskID) {
                     if task.status == .trashed {
@@ -83,6 +87,7 @@ struct ContentView: View {
             }
         }
         .frame(minWidth: 900, minHeight: 620)
+        .tint(AppTheme.accent)
         .toolbar {
             ToolbarItem(placement: .primaryAction) {
                 if destination != .planner && destination != .weekly && destination != .sop {
@@ -92,11 +97,13 @@ struct ContentView: View {
                         Label("任务详情", systemImage: "sidebar.trailing")
                     }
                     .keyboardShortcut("i", modifiers: [.command, .option])
+                    .disabled(selectedTaskID == nil)
+                    .help(showInspector ? "隐藏任务详情" : "显示任务详情")
                 }
             }
         }
         .onChange(of: destination) { _, newValue in
-            if newValue == .planner || newValue == .weekly || newValue == .sop { selectedTaskID = nil }
+            selectedTaskID = nil
         }
         .onChange(of: selectedTaskID) { _, newValue in
             if newValue != nil { showInspector = true }
@@ -115,6 +122,7 @@ struct ContentView: View {
         }
         .onReceive(NotificationCenter.default.publisher(for: .showQuickAdd)) { _ in
             destination = .inbox
+            quickAddRequest = UUID()
         }
         .task(id: store.undoAction?.id) {
             guard let id = store.undoAction?.id else { return }
@@ -125,7 +133,7 @@ struct ContentView: View {
 
     private var inspectorBinding: Binding<Bool> {
         Binding(
-            get: { destination != .planner && destination != .weekly && destination != .sop && showInspector },
+            get: { destination != .planner && destination != .weekly && destination != .sop && selectedTaskID != nil && showInspector },
             set: { showInspector = $0 }
         )
     }

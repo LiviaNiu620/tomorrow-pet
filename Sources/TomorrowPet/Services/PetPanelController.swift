@@ -12,7 +12,7 @@ final class PetPanelController {
 
     init(store: TaskStore) {
         panel = PetPanel(
-            contentRect: NSRect(x: 0, y: 0, width: 300, height: 260),
+            contentRect: NSRect(x: 0, y: 0, width: 320, height: 300),
             styleMask: [.borderless, .nonactivatingPanel],
             backing: .buffered,
             defer: false

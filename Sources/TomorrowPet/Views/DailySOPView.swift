@@ -2,6 +2,7 @@ import SwiftUI
 
 struct DailySOPView: View {
     @ObservedObject var store: DailySOPStore
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     @State private var selectedDate = Calendar.current.startOfDay(for: .now)
     @State private var showResetConfirmation = false
@@ -30,12 +31,17 @@ struct DailySOPView: View {
                 header
                 progressCard
 
+                if sections.isEmpty {
+                    PetEmptyState(title: "从一个小习惯开始", description: "点击工具栏的“编辑 SOP”，为每天建立自己的节奏。", systemImage: "leaf")
+                        .frame(maxWidth: .infinity)
+                }
                 ForEach(sections) { section in
                     sopSection(section)
                 }
             }
-            .padding(24)
+            .padding(AppTheme.pageInset)
             .frame(maxWidth: 920, alignment: .leading)
+            .frame(maxWidth: .infinity, alignment: .top)
         }
         .navigationTitle("每日 SOP")
         .toolbar {
@@ -73,7 +79,7 @@ struct DailySOPView: View {
             titleVisibility: .visible
         ) {
             Button("清空打卡", role: .destructive) {
-                withAnimation { store.reset(date: selectedDate) }
+                withAnimation(reduceMotion ? nil : .easeInOut(duration: 0.16)) { store.reset(date: selectedDate) }
             }
             Button("取消", role: .cancel) {}
         } message: {
@@ -82,20 +88,18 @@ struct DailySOPView: View {
     }
 
     private var header: some View {
-        HStack(alignment: .center, spacing: 16) {
-            PetFaceView(mood: completedCount == allItems.count ? .happy : .planning)
-                .frame(width: 72, height: 72)
-
-            VStack(alignment: .leading, spacing: 5) {
-                Text(Calendar.current.isDateInToday(selectedDate) ? "今天按节奏走" : "查看每日节奏")
-                    .font(.largeTitle.bold())
-                Text(selectedDate.formatted(date: .complete, time: .omitted))
-                    .foregroundStyle(.secondary)
-                if Calendar.current.component(.weekday, from: selectedDate) == 1 {
-                    Text(DailySOPTemplate.isLastSundayOfMonth(selectedDate) ? "周日计划 · 月末复盘日" : "周日计划日")
-                        .font(.caption.weight(.semibold))
-                        .foregroundStyle(.blue)
-                }
+        VStack(alignment: .leading, spacing: 12) {
+            PetPageHeader(
+                eyebrow: selectedDate.formatted(date: .complete, time: .omitted),
+                title: Calendar.current.isDateInToday(selectedDate) ? "今天，也按自己的节奏。" : "回到这一天的节奏。",
+                subtitle: "照顾好日常的小事，给自己稳定的支持。",
+                systemImage: "leaf"
+            )
+            if Calendar.current.component(.weekday, from: selectedDate) == 1 {
+                PetStatusPill(
+                    text: DailySOPTemplate.isLastSundayOfMonth(selectedDate) ? "周日计划 · 月末复盘日" : "周日计划日",
+                    systemImage: "calendar.badge.clock"
+                )
             }
         }
     }
@@ -109,13 +113,14 @@ struct DailySOPView: View {
                     Spacer()
                     Text(progress, format: .percent.precision(.fractionLength(0)))
                         .font(.title3.bold().monospacedDigit())
-                        .foregroundStyle(.teal)
+                        .foregroundStyle(AppTheme.success)
                 }
                 ProgressView(value: progress)
-                    .tint(.teal)
+                    .tint(AppTheme.success)
+                    .accessibilityLabel("当日 SOP 完成进度")
 
                 HStack {
-                    Text("SOP 是固定节奏，普通 Todo 继续只放需要管理的任务。")
+                    Text("日常习惯在这里打卡，专注任务在任务列表推进。")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                     Spacer()
@@ -144,8 +149,13 @@ struct DailySOPView: View {
             }
             .frame(maxWidth: .infinity, alignment: .leading)
         } label: {
-            Label(section.title, systemImage: section.systemImage)
-                .foregroundStyle(Color.areaColor(named: section.tintName))
+            HStack {
+                Label(section.title, systemImage: section.systemImage)
+                Spacer()
+                Text("\(section.items.filter { store.isCompleted($0.id, on: selectedDate) }.count) / \(section.items.count)")
+                    .font(.caption.monospacedDigit())
+                    .foregroundStyle(.secondary)
+            }
         }
     }
 
@@ -154,7 +164,7 @@ struct DailySOPView: View {
         return Toggle(isOn: Binding(
             get: { completed },
             set: { value in
-                withAnimation(.easeInOut(duration: 0.16)) {
+                withAnimation(reduceMotion ? nil : .easeInOut(duration: 0.16)) {
                     store.setCompleted(item.id, completed: value, on: selectedDate)
                 }
             }
@@ -180,12 +190,8 @@ struct DailySOPView: View {
                     }
                 }
                 Spacer(minLength: 8)
-                Text(completed ? "【✓】" : "【 】")
-                    .font(.caption.monospaced())
-                    .foregroundStyle(completed ? Color.teal : Color.secondary.opacity(0.65))
-                    .accessibilityHidden(true)
             }
-            .padding(.vertical, 8)
+            .padding(.vertical, 11)
             .contentShape(Rectangle())
         }
         .toggleStyle(.checkbox)
