@@ -89,6 +89,19 @@ struct SettingsView: View {
                     .font(.caption)
                     .foregroundStyle(saveMessage.contains("失败") ? .red : .green)
             }
+
+            Section("关于明日团子") {
+                LabeledContent("版本", value: Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "开发版")
+                LabeledContent("构建版本", value: Bundle.main.object(forInfoDictionaryKey: "TomorrowPetRevision") as? String ?? "未知")
+                if let timestamp = Bundle.main.object(forInfoDictionaryKey: "TomorrowPetBuildTime") as? String,
+                   let date = ISO8601DateFormatter().date(from: timestamp) {
+                    LabeledContent("构建时间", value: date.formatted(date: .abbreviated, time: .standard))
+                }
+                Text(Bundle.main.bundleURL.path)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .textSelection(.enabled)
+            }
         }
         .formStyle(.grouped)
         .tint(AppTheme.accent)

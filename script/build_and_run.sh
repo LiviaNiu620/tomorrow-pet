@@ -5,6 +5,7 @@ MODE="${1:-run}"
 APP_NAME="TomorrowPet"
 BUNDLE_ID="com.tomorrowpet.desktop"
 MIN_SYSTEM_VERSION="14.0"
+APP_VERSION="0.2.0"
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 BUILD_ROOT="$ROOT_DIR/.build/tomorrow-pet"
@@ -95,6 +96,13 @@ build_app() {
 }
 
 stage_bundle() {
+  local build_number build_revision build_time
+  build_number="$(date -u +%Y%m%d%H%M%S)"
+  build_time="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+  build_revision="$(git -C "$ROOT_DIR" rev-parse --short HEAD 2>/dev/null || printf unknown)"
+  if [[ -n "$(git -C "$ROOT_DIR" status --porcelain --untracked-files=no 2>/dev/null)" ]]; then
+    build_revision="$build_revision-local"
+  fi
   rm -rf "$APP_BUNDLE"
   mkdir -p "$APP_MACOS"
   cp "$BUILD_BINARY" "$APP_BINARY"
@@ -116,9 +124,13 @@ stage_bundle() {
   <key>CFBundlePackageType</key>
   <string>APPL</string>
   <key>CFBundleShortVersionString</key>
-  <string>0.1.0</string>
+  <string>$APP_VERSION</string>
   <key>CFBundleVersion</key>
-  <string>1</string>
+  <string>$build_number</string>
+  <key>TomorrowPetRevision</key>
+  <string>$build_revision</string>
+  <key>TomorrowPetBuildTime</key>
+  <string>$build_time</string>
   <key>LSMinimumSystemVersion</key>
   <string>$MIN_SYSTEM_VERSION</string>
   <key>NSPrincipalClass</key>
@@ -165,12 +177,25 @@ if [[ "$MODE" == "--test" || "$MODE" == "test" ]]; then
   exit 0
 fi
 
-pkill -x "$APP_NAME" >/dev/null 2>&1 || true
+stop_existing_app() {
+  prepare_compatible_toolchain
+  CLANG_MODULE_CACHE_PATH="$MODULE_CACHE" swiftc \
+    -vfsoverlay "$VFS_OVERLAY" \
+    -sdk "$COMPATIBLE_SDK" \
+    -target "arm64-apple-macosx$MIN_SYSTEM_VERSION" \
+    -module-cache-path "$MODULE_CACHE" \
+    "$ROOT_DIR/script/StopRunningApp.swift" \
+    -o "$BUILD_ROOT/StopRunningApp"
+  "$BUILD_ROOT/StopRunningApp"
+}
+
 build_app
+stop_existing_app
 stage_bundle
 
 open_app() {
-  /usr/bin/open -n "$APP_BUNDLE"
+  /usr/bin/open "$APP_BUNDLE"
+  echo "Opened $APP_BUNDLE (version $APP_VERSION)"
 }
 
 case "$MODE" in

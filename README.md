@@ -63,6 +63,18 @@ dist/TomorrowPet.app
 
 本机的 Command Line Tools 如果存在 Swift 编译器与 SDK 小版本不一致，脚本会在 `.build/` 内创建写时复制的兼容 SDK，不修改系统文件。正常安装的 Xcode/SwiftPM 环境会优先使用 `swift build`。
 
+## 更新后仍显示旧界面
+
+GitHub 更新的是源码；正在运行的旧应用需要退出，并重新构建和启动：
+
+```bash
+./script/build_and_run.sh --verify
+```
+
+脚本先完成编译，再通过 macOS 请求现有实例正常退出，确认退出后替换 `dist/TomorrowPet.app` 并启动。若退出被拒绝或未完成，脚本会停止，不强制结束应用。运行环境需要允许访问 macOS 应用进程和 LaunchServices。
+
+在“设置 → 通用 → 关于明日团子”查看版本、源码提交、构建时间和实际应用路径。界面优化版为 `0.2.0`，明日计划标题为“给明天，留一点从容。”；宽窗口会显示双栏规划布局。
+
 ## 第一次使用
 
 1. 启动应用，在系统提示中允许通知。
