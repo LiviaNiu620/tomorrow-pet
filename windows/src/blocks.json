@@ -1,0 +1,56 @@
+[
+  {
+    "title": "早晨与通勤",
+    "start": 420,
+    "end": 540,
+    "scope": "everyday"
+  },
+  {
+    "title": "工作启动 · Email · Top 3",
+    "start": 540,
+    "end": 565,
+    "scope": "everyday"
+  },
+  {
+    "title": "健身",
+    "start": 720,
+    "end": 800,
+    "scope": "everyday"
+  },
+  {
+    "title": "Email 第二轮",
+    "start": 990,
+    "end": 1005,
+    "scope": "everyday"
+  },
+  {
+    "title": "收尾 · 校车复盘",
+    "start": 1035,
+    "end": 1090,
+    "scope": "everyday"
+  },
+  {
+    "title": "做饭 · 晚饭 · 背 20 词",
+    "start": 1100,
+    "end": 1220,
+    "scope": "everyday"
+  },
+  {
+    "title": "洗漱放松 · 复盘 · 睡觉",
+    "start": 1320,
+    "end": 1440,
+    "scope": "everyday"
+  },
+  {
+    "title": "周日计划 SOP",
+    "start": 1230,
+    "end": 1290,
+    "scope": "sunday"
+  },
+  {
+    "title": "月度复盘",
+    "start": 1290,
+    "end": 1320,
+    "scope": "monthEnd"
+  }
+]

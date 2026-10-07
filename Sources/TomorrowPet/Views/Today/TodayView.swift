@@ -697,7 +697,7 @@ struct SOPStripes: ShapeStyle {
         ImagePaint(image: Image(nsImage: SOPStripes.tile), scale: 1)
     }
 
-    private static let tile: NSImage = {
+    private static var tile: NSImage {
         let size = NSSize(width: 10, height: 10)
         let image = NSImage(size: size)
         image.lockFocus()
@@ -712,5 +712,5 @@ struct SOPStripes: ShapeStyle {
         path.stroke()
         image.unlockFocus()
         return image
-    }()
+    }
 }

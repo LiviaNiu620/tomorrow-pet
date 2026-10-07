@@ -1,0 +1,55 @@
+{
+  "name": "tomorrow-pet-windows",
+  "version": "0.3.0",
+  "private": true,
+  "description": "明日团子 Dango desktop planner for Windows",
+  "author": "Tomorrow Pet contributors",
+  "main": "src/main.cjs",
+  "scripts": {
+    "start": "electron .",
+    "test": "node --test test/*.test.cjs",
+    "check": "node --check src/main.cjs && node --check src/core.cjs && node --check src/preload.cjs && node --check src/ai.cjs && node --check ui/app.js",
+    "dist": "electron-builder --win nsis zip --x64 --publish never",
+    "smoke": "node test/smoke.cjs"
+  },
+  "devDependencies": {
+    "electron": "44.6.0",
+    "electron-builder": "26.15.3"
+  },
+  "build": {
+    "appId": "com.tomorrowpet.windows",
+    "productName": "Tomorrow Pet",
+    "directories": {
+      "output": "../dist/windows"
+    },
+    "files": [
+      "src/**",
+      "ui/**",
+      "package.json"
+    ],
+    "asar": true,
+    "win": {
+      "target": [
+        "nsis",
+        "zip"
+      ],
+      "artifactName": "TomorrowPet-${version}-Windows-${arch}.${ext}",
+      "icon": "ui/icon.ico"
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "shortcutName": "明日团子",
+      "deleteAppDataOnUninstall": false,
+      "artifactName": "TomorrowPet-${version}-Windows-${arch}-Setup.${ext}"
+    }
+  },
+  "dependencies": {
+    "node-ical": "0.27.3"
+  },
+  "engines": {
+    "node": ">=22.12.0"
+  }
+}

@@ -1,0 +1,482 @@
+[
+  {
+    "id": "wake",
+    "time": "07:00",
+    "title": "起床",
+    "sectionTitle": "早晨与通勤",
+    "scope": "everyday",
+    "isPlanningContext": true
+  },
+  {
+    "id": "wash",
+    "time": "07:20",
+    "title": "完成洗漱、换衣服",
+    "sectionTitle": "早晨与通勤",
+    "scope": "everyday",
+    "isPlanningContext": true
+  },
+  {
+    "id": "makeup",
+    "time": "07:55",
+    "title": "完成化妆",
+    "sectionTitle": "早晨与通勤",
+    "scope": "everyday",
+    "isPlanningContext": true
+  },
+  {
+    "id": "pack",
+    "time": "08:00",
+    "title": "收好随身物品",
+    "sectionTitle": "早晨与通勤",
+    "scope": "everyday",
+    "isPlanningContext": true
+  },
+  {
+    "id": "coffee",
+    "time": "08:00–08:20",
+    "title": "制作并装好带走的咖啡",
+    "sectionTitle": "早晨与通勤",
+    "scope": "everyday",
+    "isPlanningContext": true
+  },
+  {
+    "id": "leave-home",
+    "time": "08:20",
+    "title": "出门前往校车站",
+    "sectionTitle": "早晨与通勤",
+    "scope": "everyday",
+    "isPlanningContext": true
+  },
+  {
+    "id": "morning-bus",
+    "time": "08:30",
+    "title": "坐校车去学校",
+    "sectionTitle": "早晨与通勤",
+    "scope": "everyday",
+    "isPlanningContext": true
+  },
+  {
+    "id": "morning-words",
+    "time": "08:30–09:00",
+    "title": "背当天前 30 个单词",
+    "sectionTitle": "早晨与通勤",
+    "scope": "everyday",
+    "isPlanningContext": true
+  },
+  {
+    "id": "arrive-work",
+    "time": "09:00",
+    "title": "到达工位",
+    "sectionTitle": "早晨与通勤",
+    "scope": "everyday",
+    "isPlanningContext": true
+  },
+  {
+    "id": "email-scan",
+    "time": "09:00–09:04",
+    "title": "快速 Check Email",
+    "sectionTitle": "工作启动",
+    "scope": "everyday",
+    "isPlanningContext": true
+  },
+  {
+    "id": "record-deadlines",
+    "time": "09:00–09:04",
+    "title": "记录新增的紧急事项和 Deadline",
+    "sectionTitle": "工作启动",
+    "scope": "everyday",
+    "isPlanningContext": true
+  },
+  {
+    "id": "work-order",
+    "time": "09:04–09:10",
+    "title": "完成今日工作排序",
+    "sectionTitle": "工作启动",
+    "scope": "everyday",
+    "isPlanningContext": true
+  },
+  {
+    "id": "daily-top-three",
+    "time": "09:10 前",
+    "title": "写出今日 Top 3",
+    "sectionTitle": "工作启动",
+    "scope": "everyday",
+    "isPlanningContext": true
+  },
+  {
+    "id": "top-one-action",
+    "time": "09:10 前",
+    "title": "明确 Top 1 的启动动作",
+    "sectionTitle": "工作启动",
+    "scope": "everyday",
+    "isPlanningContext": true
+  },
+  {
+    "id": "email-process-am",
+    "time": "09:10–09:25",
+    "title": "集中回复和处理 Email",
+    "sectionTitle": "工作启动",
+    "scope": "everyday",
+    "isPlanningContext": true
+  },
+  {
+    "id": "gym-leave",
+    "time": "12:00",
+    "title": "去健身",
+    "sectionTitle": "白天",
+    "scope": "everyday",
+    "isPlanningContext": true
+  },
+  {
+    "id": "gym-return",
+    "time": "13:20",
+    "title": "健身后回到工位",
+    "sectionTitle": "白天",
+    "scope": "everyday",
+    "isPlanningContext": true
+  },
+  {
+    "id": "email-process-pm",
+    "time": "16:30–16:45",
+    "title": "第二次 Check 和回复 Email",
+    "sectionTitle": "白天",
+    "scope": "everyday",
+    "isPlanningContext": true
+  },
+  {
+    "id": "work-wrap",
+    "time": "17:15",
+    "title": "开始工作收尾",
+    "sectionTitle": "白天",
+    "scope": "everyday",
+    "isPlanningContext": true
+  },
+  {
+    "id": "record-unfinished",
+    "time": "17:15–17:25",
+    "title": "记录未完成事项",
+    "sectionTitle": "白天",
+    "scope": "everyday",
+    "isPlanningContext": true
+  },
+  {
+    "id": "record-first-action",
+    "time": "17:15–17:25",
+    "title": "记录明天第一件要做的事",
+    "sectionTitle": "白天",
+    "scope": "everyday",
+    "isPlanningContext": true
+  },
+  {
+    "id": "leave-work",
+    "time": "17:25",
+    "title": "下班去等车",
+    "sectionTitle": "白天",
+    "scope": "everyday",
+    "isPlanningContext": true
+  },
+  {
+    "id": "evening-bus",
+    "time": "17:45",
+    "title": "坐校车回家",
+    "sectionTitle": "白天",
+    "scope": "everyday",
+    "isPlanningContext": true
+  },
+  {
+    "id": "work-review-bus",
+    "time": "17:45–18:10",
+    "title": "校车上复盘今日工作",
+    "sectionTitle": "白天",
+    "scope": "everyday",
+    "isPlanningContext": true
+  },
+  {
+    "id": "arrive-home",
+    "time": "18:10",
+    "title": "到家",
+    "sectionTitle": "白天",
+    "scope": "everyday",
+    "isPlanningContext": true
+  },
+  {
+    "id": "cook",
+    "time": "18:20",
+    "title": "开始做饭",
+    "sectionTitle": "晚上",
+    "scope": "everyday",
+    "isPlanningContext": true
+  },
+  {
+    "id": "dinner",
+    "time": "19:00",
+    "title": "开始吃饭",
+    "sectionTitle": "晚上",
+    "scope": "everyday",
+    "isPlanningContext": true
+  },
+  {
+    "id": "breakfast-prep",
+    "time": "20:00 前",
+    "title": "完成第二天早餐准备",
+    "sectionTitle": "晚上",
+    "scope": "everyday",
+    "isPlanningContext": true
+  },
+  {
+    "id": "evening-words",
+    "time": "20:00–20:20",
+    "title": "背剩余 20 个单词",
+    "sectionTitle": "晚上",
+    "scope": "everyday",
+    "isPlanningContext": true
+  },
+  {
+    "id": "personal-work",
+    "time": "20:20–22:00",
+    "title": "个人学习和自己的工作",
+    "sectionTitle": "晚上",
+    "scope": "everyday",
+    "isPlanningContext": true
+  },
+  {
+    "id": "night-routine",
+    "time": "22:00–23:00",
+    "title": "卸妆、洗漱、洗澡、放松",
+    "sectionTitle": "晚上",
+    "scope": "everyday",
+    "isPlanningContext": true
+  },
+  {
+    "id": "watch-show",
+    "time": "23:00",
+    "title": "看剧、放松",
+    "sectionTitle": "晚上",
+    "scope": "everyday",
+    "isPlanningContext": true
+  },
+  {
+    "id": "stop-show",
+    "time": "23:40",
+    "title": "停止看剧",
+    "sectionTitle": "晚上",
+    "scope": "everyday",
+    "isPlanningContext": true
+  },
+  {
+    "id": "daily-review",
+    "time": "23:40–24:00",
+    "title": "写每日复盘",
+    "sectionTitle": "晚上",
+    "scope": "everyday",
+    "isPlanningContext": true
+  },
+  {
+    "id": "tomorrow-plan",
+    "time": "23:40–24:00",
+    "title": "列出第二天计划",
+    "sectionTitle": "晚上",
+    "scope": "everyday",
+    "isPlanningContext": true
+  },
+  {
+    "id": "sleep",
+    "time": "24:00",
+    "title": "睡觉",
+    "sectionTitle": "晚上",
+    "scope": "everyday",
+    "isPlanningContext": true
+  },
+  {
+    "id": "read-paper",
+    "time": "",
+    "title": "阅读至少一篇文献",
+    "sectionTitle": "每日固定目标",
+    "scope": "everyday",
+    "isPlanningContext": true
+  },
+  {
+    "id": "leetcode-one",
+    "time": "",
+    "title": "LeetCode 第 1 题",
+    "sectionTitle": "每日固定目标",
+    "scope": "everyday",
+    "isPlanningContext": true
+  },
+  {
+    "id": "leetcode-two",
+    "time": "",
+    "title": "LeetCode 第 2 题",
+    "sectionTitle": "每日固定目标",
+    "scope": "everyday",
+    "isPlanningContext": true
+  },
+  {
+    "id": "data-structure",
+    "time": "",
+    "title": "学习一节数据结构课",
+    "sectionTitle": "每日固定目标",
+    "scope": "everyday",
+    "isPlanningContext": true
+  },
+  {
+    "id": "words-fifty",
+    "time": "",
+    "title": "背 50 个单词",
+    "sectionTitle": "每日固定目标",
+    "scope": "everyday",
+    "isPlanningContext": true
+  },
+  {
+    "id": "ted",
+    "time": "",
+    "title": "看或听一节 TED",
+    "sectionTitle": "每日固定目标",
+    "scope": "everyday",
+    "isPlanningContext": true
+  },
+  {
+    "id": "journal",
+    "time": "",
+    "title": "写日记",
+    "sectionTitle": "每日固定目标",
+    "scope": "everyday",
+    "isPlanningContext": true
+  },
+  {
+    "id": "fitness",
+    "time": "",
+    "title": "完成健身",
+    "sectionTitle": "每日固定目标",
+    "scope": "everyday",
+    "isPlanningContext": true
+  },
+  {
+    "id": "weekly-review",
+    "time": "周日晚上",
+    "title": "完成本周复盘",
+    "sectionTitle": "周日计划",
+    "scope": "sunday",
+    "isPlanningContext": false
+  },
+  {
+    "id": "next-week-deadlines",
+    "time": "",
+    "title": "检查下周所有 Deadline",
+    "sectionTitle": "周日计划",
+    "scope": "sunday",
+    "isPlanningContext": false
+  },
+  {
+    "id": "two-week-deadlines",
+    "time": "",
+    "title": "检查未来两周的重要 Deadline",
+    "sectionTitle": "周日计划",
+    "scope": "sunday",
+    "isPlanningContext": false
+  },
+  {
+    "id": "next-week-calendar",
+    "time": "",
+    "title": "检查下周会议和固定安排",
+    "sectionTitle": "周日计划",
+    "scope": "sunday",
+    "isPlanningContext": false
+  },
+  {
+    "id": "email-deadlines",
+    "time": "",
+    "title": "检查邮箱中遗漏的 Deadline",
+    "sectionTitle": "周日计划",
+    "scope": "sunday",
+    "isPlanningContext": false
+  },
+  {
+    "id": "waiting-followup",
+    "time": "",
+    "title": "检查等待别人回复的事项",
+    "sectionTitle": "周日计划",
+    "scope": "sunday",
+    "isPlanningContext": false
+  },
+  {
+    "id": "weekly-outcomes",
+    "time": "",
+    "title": "列出下周三个核心结果",
+    "sectionTitle": "周日计划",
+    "scope": "sunday",
+    "isPlanningContext": false
+  },
+  {
+    "id": "weekly-allocation",
+    "time": "",
+    "title": "将核心结果初步分配到每天",
+    "sectionTitle": "周日计划",
+    "scope": "sunday",
+    "isPlanningContext": false
+  },
+  {
+    "id": "monday-top-three",
+    "time": "",
+    "title": "明确周一的 Top 3",
+    "sectionTitle": "周日计划",
+    "scope": "sunday",
+    "isPlanningContext": false
+  },
+  {
+    "id": "monday-first-action",
+    "time": "",
+    "title": "明确周一到工位后的第一项行动",
+    "sectionTitle": "周日计划",
+    "scope": "sunday",
+    "isPlanningContext": false
+  },
+  {
+    "id": "monthly-review",
+    "time": "",
+    "title": "完成本月复盘",
+    "sectionTitle": "月度计划",
+    "scope": "monthEnd",
+    "isPlanningContext": false
+  },
+  {
+    "id": "next-month-dates",
+    "time": "",
+    "title": "检查下月重要日期与 Deadline",
+    "sectionTitle": "月度计划",
+    "scope": "monthEnd",
+    "isPlanningContext": false
+  },
+  {
+    "id": "next-month-domains",
+    "time": "",
+    "title": "制定工作、学习、健康、生活目标",
+    "sectionTitle": "月度计划",
+    "scope": "monthEnd",
+    "isPlanningContext": false
+  },
+  {
+    "id": "next-month-top-three",
+    "time": "",
+    "title": "列出下月三个最重要的结果",
+    "sectionTitle": "月度计划",
+    "scope": "monthEnd",
+    "isPlanningContext": false
+  },
+  {
+    "id": "next-month-weeks",
+    "time": "",
+    "title": "把月度结果初步分配到各周",
+    "sectionTitle": "月度计划",
+    "scope": "monthEnd",
+    "isPlanningContext": false
+  },
+  {
+    "id": "stop-start-continue",
+    "time": "",
+    "title": "写下需要停止、开始和继续的事情",
+    "sectionTitle": "月度计划",
+    "scope": "monthEnd",
+    "isPlanningContext": false
+  }
+]

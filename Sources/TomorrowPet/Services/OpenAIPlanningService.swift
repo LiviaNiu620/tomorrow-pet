@@ -222,7 +222,7 @@ struct OpenAIPlanningService {
         return message
     }
 
-    private static let suggestedTaskSchema: [String: Any] = [
+    private static var suggestedTaskSchema: [String: Any] { [
         "type": "object",
         "properties": [
             "task_id": ["type": ["string", "null"]],
@@ -236,9 +236,9 @@ struct OpenAIPlanningService {
         ],
         "required": ["task_id", "input_item_id", "title", "area", "reason", "estimated_minutes", "priority", "source"],
         "additionalProperties": false
-    ]
+    ] }
 
-    private static let planSchema: [String: Any] = [
+    private static var planSchema: [String: Any] { [
         "type": "object",
         "properties": [
             "summary": ["type": "string"],
@@ -257,7 +257,7 @@ struct OpenAIPlanningService {
         ],
         "required": ["summary", "top_three", "additional_tasks", "workload_assessment", "notes"],
         "additionalProperties": false
-    ]
+    ] }
 }
 
 enum PlanningError: LocalizedError, Equatable {

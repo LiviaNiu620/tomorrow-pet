@@ -2,7 +2,7 @@
 
 当前开发版为 **0.3.0 / Dango**：今天时间轴、本周容量规划、任务库、习惯 · SOP、复盘与专注六个页面，采用三色团子界面。任务支持自然语言录入、时间轴安排和周目标关联；专注与复盘保存于独立的 `journal.json`。
 
-macOS 分发包构建：`./script/package_macos.sh`，输出至 `dist/releases/`。GitHub Actions 自动构建 Apple Silicon 与 Intel 的 DMG、ZIP 和校验文件。新版分析、平台限制和签名说明见 [0.3.0 分发说明](docs/RELEASE-0.3.0.md)。Windows 需要独立客户端移植，当前 SwiftUI 源码不支持直接生成 Windows 安装包。
+macOS 分发包构建：`./script/package_macos.sh`，输出至 `dist/releases/`。GitHub Actions 自动构建 Apple Silicon 与 Intel 的 DMG、ZIP 和校验文件。新版分析、平台限制和签名说明见 [0.3.0 分发说明](docs/RELEASE-0.3.0.md)。Windows 客户端位于 [windows/](windows/README.md)，由 Electron 实现同样的六个主页面和核心本地功能，GitHub Actions 生成 NSIS 安装程序及 ZIP 包。平台功能差异请参阅分发说明。
 
 一款原生 macOS 桌面任务与计划应用。桌面上的团子会在晚上提醒你结合 Calendar 和统一任务库安排第二天，并在周日提醒你制定本周计划。
 

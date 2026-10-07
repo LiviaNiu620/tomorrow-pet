@@ -582,7 +582,7 @@ final class TaskStore: ObservableObject {
             .appendingPathComponent("task-store.json")
     }
 
-    private static func taskSort(_ lhs: TaskItem, _ rhs: TaskItem) -> Bool {
+    nonisolated private static func taskSort(_ lhs: TaskItem, _ rhs: TaskItem) -> Bool {
         let lhsDate = lhs.plannedDate ?? lhs.dueDate ?? .distantFuture
         let rhsDate = rhs.plannedDate ?? rhs.dueDate ?? .distantFuture
         if lhsDate != rhsDate { return lhsDate < rhsDate }
