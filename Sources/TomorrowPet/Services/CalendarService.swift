@@ -42,7 +42,15 @@ final class CalendarService: ObservableObject {
     func requestAppleAccessAndRefresh(referenceDate: Date = .now) async {
         do {
             if !hasAccess {
-                _ = try await eventStore.requestFullAccessToEvents()
+                let _: Bool = try await withCheckedThrowingContinuation { continuation in
+                    eventStore.requestFullAccessToEvents { granted, error in
+                        if let error {
+                            continuation.resume(throwing: error)
+                        } else {
+                            continuation.resume(returning: granted)
+                        }
+                    }
+                }
                 authorizationStatus = EKEventStore.authorizationStatus(for: .event)
             }
             guard hasAccess else {

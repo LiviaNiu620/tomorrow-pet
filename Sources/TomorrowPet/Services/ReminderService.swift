@@ -81,16 +81,16 @@ final class ReminderService: NSObject, UNUserNotificationCenterDelegate {
         didReceive response: UNNotificationResponse,
         withCompletionHandler completionHandler: @escaping () -> Void
     ) {
+        let route = response.notification.request.content.userInfo["route"] as? String
         Task { @MainActor in
             AppWindowActivator.showMainWindow()
-            let route = response.notification.request.content.userInfo["route"] as? String
             switch route {
             case "weekly": NotificationCenter.default.post(name: .openWeeklyPlanner, object: nil)
             case "today": AppRouter.shared.go(.today, mode: .today)
             default: NotificationCenter.default.post(name: .openTomorrowPlanner, object: nil)
             }
-            completionHandler()
         }
+        completionHandler()
     }
 
     nonisolated func userNotificationCenter(

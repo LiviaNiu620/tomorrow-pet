@@ -1,48 +1,749 @@
-'use strict';
-let state,route='today',date=dayKey(new Date()),weekDate=date,filter='all',search='',areaFilter=null,plan=null,generating=false;
-const routes=[['today','☀','今天'],['week','▦','本周'],['library','☷','任务库'],['habits','✓','习惯 · SOP'],['review','▥','复盘'],['focus','◴','专注']];
-const $=s=>document.querySelector(s),esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-function dayKey(v){if(typeof v==='string'&&/^\d{4}-\d{2}-\d{2}$/.test(v))return v;const d=new Date(v);return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;}
-function shift(s,n){const d=new Date(`${s}T00:00:00`);d.setDate(d.getDate()+n);return dayKey(d);}
-function week(s){const d=new Date(`${s}T00:00:00`);return shift(s,-((d.getDay()+6)%7));}
-function active(t){return !['completed','trashed','cancelled','archived'].includes(t.status);}
-function onDate(t,d){return t.plannedDate&&dayKey(t.plannedDate)===d;}
-function clock(n){return `${String(Math.floor(n/60)).padStart(2,'0')}:${String(n%60).padStart(2,'0')}`;}
-function duration(n){return n>=60?`${Math.floor(n/60)}h${n%60?`${n%60}m`:''}`:`${n}m`;}
-function toast(message){$('#toast').textContent=message;$('#toast').hidden=false;clearTimeout(toast.timer);toast.timer=setTimeout(()=>$('#toast').hidden=true,5000);}
-async function unwrap(promise){const response=await promise;if(!response.ok)throw new Error(response.error);return response.value;}
-async function action(name,payload={}){state=await unwrap(window.dango.action(name,payload));render();return state;}
-function navigate(value){route=value==='capture'?'today':value;render();if(value==='capture')$('#capture-input')?.focus();}
-function areaName(t){return state.areas.find(a=>a.id===t.areaID)?.name||'未分类';}
-function header(title,subtitle,actions=''){return `<header class="page-head"><div><p class="eyebrow">${esc(subtitle)}</p><h1>${esc(title)}</h1></div><div class="head-actions">${actions}</div></header>`;}
-function empty(message){return `<div class="empty">${esc(message)}</div>`;}
-function taskRow(t){const done=t.status==='completed';return `<div class="task-row" draggable="${t.status!=='trashed'}" data-drag="${esc(t.id)}"><button class="check ${done?'done':''}" data-complete="${esc(t.id)}" aria-label="${done?'取消完成':'完成'}：${esc(t.title)}" ${t.status==='trashed'?'disabled':''}>${done?'✓':''}</button><div class="task-main"><button class="task-title ${done?'done-title':''}" data-edit="${esc(t.id)}">${esc(t.title)}</button><div class="task-meta"><span>${esc(areaName(t))}</span>${t.scheduledMinute!=null?`<span>${clock(t.scheduledMinute)}</span>`:''}${t.estimatedMinutes?`<span>${duration(t.estimatedMinutes)}</span>`:''}${t.plannedDate?`<span>${dayKey(t.plannedDate)}</span>`:''}${t.dueDate?`<span>截止 ${dayKey(t.dueDate)}</span>`:''}${t.recurrence?'<span>↻ 重复</span>':''}</div></div>${t.status==='trashed'?`<button data-restore="${esc(t.id)}">恢复</button>`:t.priority!=='none'?`<span class="badge ${esc(t.priority)}">${{high:'高',medium:'中',low:'低'}[t.priority]}优先级</span>`:''}</div>`;}
-function captureForm(){return `<form id="capture-form" class="card capture"><label for="capture-input">随手记</label><input id="capture-input" name="capture" placeholder="明天下午3点 写摘要 #工作 45m !高" required maxlength="1000"><button class="primary">添加 ↵</button></form>`;}
-function habits(d){const day=new Date(`${d}T00:00:00`);return state.habits.filter(h=>h.scope==='everyday'||day.getDay()===0&&(h.scope==='sunday'||new Date(day.getFullYear(),day.getMonth(),day.getDate()+7).getMonth()!==day.getMonth()));}
-function sessionMinutes(d){return state.sessions.filter(s=>dayKey(s.startedAt)===d).reduce((sum,s)=>sum+s.minutes,0);}
-function render(){if(!state)return;$('#nav').innerHTML=routes.map(([id,icon,title])=>`<button data-route="${id}" class="${route===id?'active':''}" ${route===id?'aria-current="page"':''}><span class="nav-icon" aria-hidden="true">${icon}</span>${title}</button>`).join('');$('#areas').innerHTML=state.areas.map(a=>`<button class="area-nav" data-area="${esc(a.id)}"><span class="dot" aria-hidden="true"></span>${esc(a.name)}</button>`).join('');$('#pet-note').textContent=state.focus?.status==='running'?'正在专注，先把这一颗吃完。':`今天已完成 ${state.tasks.filter(t=>t.status==='completed'&&t.completedAt&&dayKey(t.completedAt)===dayKey(new Date())).length} 件事。按自己的节奏来。`;
- const pages={today:todayPage,week:weekPage,library:libraryPage,habits:habitsPage,review:reviewPage,focus:focusPage,settings:settingsPage};$('#view').innerHTML=(pages[route]||todayPage)();bindForms();updateClock();}
-function todayPage(){const tasks=state.tasks.filter(t=>onDate(t,date)&&t.status!=='trashed'),pending=tasks.filter(active),scheduled=pending.filter(t=>t.scheduledMinute!=null),events=state.events.filter(e=>dayKey(e.startDate)<=date&&dayKey(e.endDate)>=date),h=habits(date),done=h.filter(x=>(state.completions[date]||[]).includes(x.id)).length;
- const timeline=Array.from({length:17},(_,i)=>{const hour=i+7,items=scheduled.filter(t=>Math.floor(t.scheduledMinute/60)===hour),e=events.filter(x=>!x.isAllDay&&new Date(x.startDate).getHours()===hour&&dayKey(x.startDate)===date),habit=h.filter(x=>new RegExp(`^${String(hour).padStart(2,'0')}:`).test(x.time||''));return `<div class="timeline-slot" data-hour="${hour}" data-date="${date}"><span class="time">${clock(hour*60)}</span><div>${e.map(x=>`<div class="event">${esc(x.title)}<br>${new Date(x.startDate).toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'})}–${new Date(x.endDate).toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'})}</div>`).join('')}${habit.map(x=>`<div class="sop-block">${esc(x.title)}</div>`).join('')}${items.map(taskRow).join('')}</div></div>`;}).join('');
- return header(`${date.slice(5).replace('-','/')}，${date===dayKey(new Date())?'今天':'明天'}`,'把精力留给最重要的事',`<button data-day="${dayKey(new Date())}">今天</button><button data-day="${shift(dayKey(new Date()),1)}">明天 · 规划</button><button data-command>命令 <kbd>Ctrl K</kbd></button>`)+captureForm()+`<div class="metrics"><div class="metric"><strong>${pending.length} 项</strong><small>待完成任务</small></div><div class="metric"><strong>${duration(scheduled.reduce((sum,t)=>sum+(t.estimatedMinutes||30),0))}</strong><small>已排时间</small></div><div class="metric"><strong>${done} / ${h.length}</strong><small>当日 SOP</small></div></div><div class="columns"><section class="card timeline"><h2>日历 · 任务 · SOP</h2><p class="muted">把任务拖到对应时段，或在任务详情中设置时间。</p>${events.filter(x=>x.isAllDay).map(x=>`<div class="event">全天 · ${esc(x.title)}</div>`).join('')}${timeline}</section><div><section class="card dark"><small>今天这一串</small><h2>${pending.length?'一次做好一件事。':'留一点空白，也很好。'}</h2><p>专注 ${duration(sessionMinutes(date))} · 完成 ${tasks.filter(t=>t.status==='completed').length} 项</p></section><section class="card"><h2>Top 3</h2>${pending.filter(t=>t.focusDate&&dayKey(t.focusDate)===date).slice(0,3).map(taskRow).join('')||empty('在任务详情中标记重点。')}</section><section class="card"><h2>未排时间</h2>${pending.filter(t=>t.scheduledMinute==null).map(taskRow).join('')||empty('目前没有待排任务。')}<button data-route="library">去任务库挑</button></section><section class="card pink"><h2>AI 明日计划</h2><form id="plan-form"><label for="plan-input">明日补充事项</label><textarea id="plan-input" rows="3" placeholder="一行写一件事，最多20条"></textarea><p class="muted">点击生成后，将活动任务、已导入日历、本周目标和 SOP 发给 OpenAI。确认后才保存任务。</p><button class="primary" ${generating?'disabled':''}>${generating?'正在生成…':'生成明日计划'}</button></form></section>${plan?planCard():''}</div></div>`;}
-function planCard(){return `<section class="card"><h2>团子的建议</h2><p>${esc(plan.summary)}</p><form id="accept-plan">${[...plan.top_three,...plan.additional_tasks].map(t=>`<div class="plan-item"><input type="checkbox" id="suggest-${t.id}" name="selected" value="${t.id}" checked><label for="suggest-${t.id}"><strong>${esc(t.title)}</strong><p>${esc(t.reason)} · ${duration(t.estimated_minutes)}</p></label></div>`).join('')}<p>${esc(plan.workload_assessment)}</p><button class="primary">确认并安排到 ${esc(plan.date)}</button></form></section>`;}
-function weekPage(){const start=week(weekDate),days=Array.from({length:7},(_,i)=>shift(start,i)),p=state.weeks[start]||{goals:['','',''],notes:''};return header(`${start.slice(5)} — ${days[6].slice(5)}`,'这一周，朝着三个方向前进',`<button data-week="${shift(start,-7)}" aria-label="上一周">←</button><button data-week="${dayKey(new Date())}">本周</button><button data-week="${shift(start,7)}" aria-label="下一周">→</button>`)+`<section class="card"><form id="week-form"><div class="goals">${[0,1,2].map(i=>`<label>目标 ${i+1}<input name="goal${i}" value="${esc(p.goals[i]||'')}" maxlength="500" placeholder="这周想完成什么？"></label>`).join('')}</div><label>备注<textarea name="notes" rows="2">${esc(p.notes)}</textarea></label><button class="primary">保存本周目标</button></form></section><div class="week-grid">${days.map((d,i)=>`<section class="day-column ${d===dayKey(new Date())?'current':''}" data-drop-date="${d}"><h3>周${'一二三四五六日'[i]} · ${d.slice(5)}</h3>${state.tasks.filter(t=>onDate(t,d)&&t.status!=='trashed').map(taskRow).join('')||empty('把任务拖到这一天')}</section>`).join('')}</div><section class="card"><h2>待安排</h2>${state.tasks.filter(t=>active(t)&&!t.plannedDate).map(taskRow).join('')||empty('任务已经安排好了。')}</section>`;}
-function libraryTasks(){return state.tasks.filter(t=>(filter==='trash'?t.status==='trashed':filter==='completed'?t.status==='completed':filter==='inbox'?t.status==='inbox':active(t))&&(!areaFilter||t.areaID===areaFilter)&&`${t.title} ${t.notes} ${t.tags.join(' ')}`.toLowerCase().includes(search.toLowerCase())).sort((a,b)=>({high:0,medium:1,low:2,none:3}[a.priority]-{high:0,medium:1,low:2,none:3}[b.priority]));}
-function libraryPage(){return header('任务库','先记下来，再慢慢理清。',`<button id="undo" ${state.canUndo?'':'disabled'}>撤销</button>`)+captureForm()+`<div class="filters">${[['all','全部'],['inbox','收件箱'],['completed','已完成'],['trash','垃圾箱']].map(([id,title])=>`<button data-filter="${id}" class="${filter===id?'selected':''}">${title}</button>`).join('')}<input id="search" placeholder="搜索标题、备注、标签" value="${esc(search)}" aria-label="搜索任务">${areaFilter?'<button id="clear-area">清除领域筛选</button>':''}</div><section class="card" id="task-results">${libraryTasks().map(taskRow).join('')||empty('没有匹配的任务。')}</section>`;}
-function habitsPage(){const items=habits(date),checked=state.completions[date]||[],done=items.filter(h=>checked.includes(h.id)).length;const sections=[...new Set(items.map(x=>x.sectionTitle))];return header('习惯 · SOP','照顾好日常的小事。',`<input id="habit-date" type="date" value="${date}" aria-label="打卡日期">`)+`<section class="card"><h2>已完成 ${done} / ${items.length}</h2><progress class="progress" value="${done}" max="${Math.max(1,items.length)}" aria-label="打卡进度"></progress></section>${sections.map(section=>`<section class="card habit-group"><h2>${esc(section)}</h2>${items.filter(h=>h.sectionTitle===section).map(h=>`<div class="habit-row"><label><input type="checkbox" data-habit="${esc(h.id)}" ${checked.includes(h.id)?'checked':''}><span class="time">${esc(h.time||'随时')}</span><span>${esc(h.title)}</span></label><button data-habit-edit="${esc(h.id)}">编辑</button></div>`).join('')}</section>`).join('')}<section class="card"><h2>编辑习惯</h2><form id="habit-form"><input name="id" type="hidden"><div class="form-grid"><label>习惯名称<input name="title" required maxlength="300"></label><label>时间（可选）<input type="time" name="time"></label><label>分组<input name="sectionTitle" value="自定义"></label><label>频率<select name="scope"><option value="everyday">每天</option><option value="sunday">每周日</option><option value="monthEnd">月末周日</option></select></label></div><label class="check-label"><input name="isPlanningContext" type="checkbox" checked>提供给 AI 作为固定节奏</label><div class="actions"><button class="primary">保存习惯</button><button type="button" id="new-habit">清空表单</button></div></form></section>`;}
-function reviewPage(){const review=state.reviews[date]||{},complete=state.tasks.filter(t=>t.completedAt&&dayKey(t.completedAt)===date),pending=state.tasks.filter(t=>active(t)&&onDate(t,date));return header('今日复盘','记下进展，也接住没完成的事。',`<input id="review-date" type="date" value="${date}" aria-label="复盘日期">`)+`<div class="metrics"><div class="metric"><strong>${complete.length}</strong><small>完成任务</small></div><div class="metric"><strong>${duration(sessionMinutes(date))}</strong><small>专注时间</small></div><div class="metric"><strong>${pending.length}</strong><small>待处理任务</small></div></div><div class="review-grid"><section class="card"><h2>今天的记录</h2><form id="review-form"><div class="form-grid">${[['energy','精力'],['mood','心情']].map(([name,title])=>`<label>${title}<select name="${name}">${[1,2,3,4,5].map(n=>`<option value="${n}" ${Number(review[name]||3)===n?'selected':''}>${n} / 5</option>`).join('')}</select></label>`).join('')}</div><label>今天推进了什么？<textarea name="progress" rows="3">${esc(review.progress)}</textarea></label><label>遇到的阻碍<textarea name="blocker" rows="3">${esc(review.blocker)}</textarea></label><label>明天第一件小事<textarea name="firstAction" rows="2">${esc(review.firstAction)}</textarea></label><button class="primary">保存复盘</button>${review.savedAt?`<p class="muted">上次保存 ${esc(new Date(review.savedAt).toLocaleString())}</p>`:''}</form></section><section class="card"><h2>还没完成的事</h2>${pending.map(t=>taskRow(t)+`<button class="ghost" data-postpone="${esc(t.id)}">顺延到明天 →</button>`).join('')||empty('今天的任务已处理完。')}</section></div>`;}
-function focusPage(){const f=state.focus,started=f&&['running','paused'].includes(f.status);return header('专注','一次吃掉一颗团子。')+`<section class="card focus-card"><div class="mascot" aria-hidden="true"><i></i><i>•ᴗ•</i><i></i></div><h2>${esc(started?f.title:'先选一件事')}</h2><form id="focus-form"><label>正在做<select name="taskID" ${started?'disabled':''}><option value="">自由专注</option>${state.tasks.filter(active).map(t=>`<option value="${esc(t.id)}" ${f?.taskID===t.id?'selected':''}>${esc(t.title)}</option>`).join('')}</select></label><div class="clock" id="focus-clock" aria-label="专注剩余时间">25:00</div><label>专注时长<select name="minutes" ${started?'disabled':''}><option value="25">25 分钟</option><option value="50">50 分钟</option><option value="90">90 分钟</option></select></label><div class="actions"><button class="primary">${f?.status==='running'?'暂停':f?.status==='paused'?'继续专注':'开始专注'}</button><button type="button" id="focus-reset">重来</button><button type="button" id="focus-finish" ${started?'':'disabled'}>提前完成</button></div></form><p class="muted">计时按实际经过时间计算；关闭主窗口后仍在托盘运行。</p></section><section class="card"><h2>今天这一串 · ${duration(sessionMinutes(dayKey(new Date())))}</h2>${state.sessions.filter(s=>dayKey(s.startedAt)===dayKey(new Date())).map(s=>`<div class="session"><span>${esc(s.taskTitle)}</span><strong>${duration(s.minutes)}</strong></div>`).join('')||empty('从一段不被打扰的时间开始。')}</section>`;}
-function settingsPage(){const s=state.settings;return header('设置','把团子调成适合你的样子。')+`<section class="card settings-card"><h2>AI 与提醒</h2><form id="settings-form"><label>OpenAI 模型<input name="model" value="${esc(s.model)}" required maxlength="100"></label><div class="form-grid"><label>周一至周六提醒<input name="dailyTime" type="time" value="${s.dailyTime}" required></label><label>周日计划提醒<input name="weeklyTime" type="time" value="${s.weeklyTime}" required></label></div><label class="check-label"><input name="reminders" type="checkbox" ${s.reminders?'checked':''}>应用运行时显示计划提醒</label><label class="check-label"><input name="pet" type="checkbox" ${s.pet?'checked':''}>显示可拖动的桌面团子</label><button class="primary">保存设置</button></form><hr><form id="key-form"><label>OpenAI API Key<input type="password" name="key" autocomplete="off" placeholder="${state.hasKey?'已保存，输入新密钥可替换':'输入 API Key'}"></label><p class="muted">密钥由系统加密保存，界面不会读取已保存的密钥。留空并保存可清除密钥。</p><button>保存密钥</button></form></section><section class="card settings-card"><h2>日历与备份</h2><p>从 Apple 或 Google Calendar 导出 .ics 文件后导入。支持时区和未来 60 天的重复事件；再次导入可更新日历快照。</p><p class="muted">Windows 首版使用日历文件导入，尚不提供 Apple Calendar 原生访问或 Google OAuth 实时同步。</p><div class="actions"><button id="import-calendar">导入日历 .ics</button><button id="export-data">导出备份</button><button id="import-data">导入备份 / Mac 数据</button></div><p class="muted">可分别导入 Mac 的 task-store.json、daily-sop.json、journal.json。相同 ID 的记录会更新，密钥不会随备份导出。</p></section><section class="card settings-card"><h2>关于明日团子</h2><p>Windows 桌面版 · ${esc(state.version)}</p><p class="settings-status muted">数据位置：${esc(state.dataPath)}</p><p>快捷键：Ctrl N 随手记 · Ctrl K 命令 · Ctrl 1–6 切页 · Ctrl Shift Space 全局呼出</p></section>`;}
-function updateClock(){const f=state?.focus;const ms=f?.status==='running'?Math.max(0,f.endsAt-Date.now()):f?.remainingMs??25*60000;const seconds=Math.ceil(ms/1000);if($('#focus-clock'))$('#focus-clock').textContent=`${String(Math.floor(seconds/60)).padStart(2,'0')}:${String(seconds%60).padStart(2,'0')}`;}
-function form(id,handler){const element=$(`#${id}`);if(element)element.addEventListener('submit',async event=>{event.preventDefault();const button=element.querySelector('button[type=submit],button:not([type])');if(button)button.disabled=true;try{await handler(new FormData(element));}catch(e){toast(e.message);}finally{if(button)button.disabled=false;}});}
-function bindForms(){form('capture-form',async data=>{await action('addTask',{text:data.get('capture'),date:route==='today'?date:null});toast('已记下这件事');$('#capture-input')?.focus();});form('week-form',async data=>{await action('week',{date:weekDate,goals:[0,1,2].map(i=>data.get(`goal${i}`)),notes:data.get('notes')});toast('本周目标已保存');});form('habit-form',async data=>{await action('saveHabit',{id:data.get('id')||undefined,title:data.get('title'),time:data.get('time'),sectionTitle:data.get('sectionTitle'),scope:data.get('scope'),isPlanningContext:data.has('isPlanningContext')});toast('习惯已保存');});form('review-form',async data=>{await action('review',{date,...Object.fromEntries(data)});toast('复盘已保存');});form('focus-form',async data=>{await action(state.focus?.status==='running'?'focusPause':'focusStart',{taskID:data.get('taskID'),minutes:Number(data.get('minutes'))});});form('settings-form',async data=>{await action('settings',{...Object.fromEntries(data),pet:data.has('pet'),reminders:data.has('reminders')});toast('设置已保存');});form('key-form',async data=>{state=await unwrap(window.dango.saveKey(data.get('key')));render();toast('密钥设置已更新');});form('plan-form',async data=>{const input=$('#plan-input').value;generating=true;render();try{plan=await unwrap(window.dango.generate(shift(dayKey(new Date()),1),input));}finally{generating=false;render();}});form('accept-plan',async data=>{state=await unwrap(window.dango.acceptPlan(plan.id,data.getAll('selected')));date=plan.date;plan=null;render();toast('计划已保存，可在任务详情中调整');});$('#search')?.addEventListener('input',e=>{search=e.target.value;$('#task-results').innerHTML=libraryTasks().map(taskRow).join('')||empty('没有匹配的任务。');});$('#habit-date')?.addEventListener('change',e=>{if(e.target.value){date=e.target.value;render();}});$('#review-date')?.addEventListener('change',e=>{if(e.target.value){date=e.target.value;render();}});}
-function editTask(id){const t=state.tasks.find(x=>x.id===id);if(!t||t.status==='trashed')return;const f=$('#task-form');f.reset();$('#task-area').innerHTML='<option value="">未分类</option>'+state.areas.map(a=>`<option value="${esc(a.id)}">${esc(a.name)}</option>`).join('');for(const k of ['id','title','status','areaID','priority','estimatedMinutes','weeklyGoalIndex','project','notes'])f.elements[k].value=t[k]??'';for(const k of ['plannedDate','dueDate'])f.elements[k].value=t[k]?dayKey(t[k]):'';f.elements.time.value=t.scheduledMinute!=null?clock(t.scheduledMinute):'';f.elements.tags.value=t.tags.join(', ');f.elements.focus.checked=!!t.focusDate;f.elements.repeat.value=t.recurrence?.frequency||'';f.elements.interval.value=t.recurrence?.interval||1;$('#task-error').textContent='';$('#task-dialog').showModal();}
-$('#task-form').addEventListener('submit',async e=>{e.preventDefault();const f=e.target,data=new FormData(f),old=state.tasks.find(t=>t.id===data.get('id'));const patch=Object.fromEntries(data);delete patch.id;delete patch.time;delete patch.focus;delete patch.repeat;delete patch.interval;patch.areaID ||= null;patch.plannedDate ||= null;patch.dueDate ||= null;patch.tags=patch.tags.split(/[,，]/).map(x=>x.trim()).filter(Boolean);patch.estimatedMinutes=patch.estimatedMinutes?Number(patch.estimatedMinutes):null;patch.weeklyGoalIndex=patch.weeklyGoalIndex!==''?Number(patch.weeklyGoalIndex):null;patch.scheduledMinute=data.get('time')?data.get('time').split(':').reduce((h,v,i)=>h+Number(v)*(i?1:60),0):null;patch.focusDate=data.has('focus')?(patch.plannedDate||dayKey(new Date())):null;patch.recurrence=data.get('repeat')?{frequency:data.get('repeat'),interval:Number(data.get('interval')),weekdays:old.recurrence?.weekdays||[],endDate:old.recurrence?.endDate||null}:null;try{await action('updateTask',{id:data.get('id'),patch});$('#task-dialog').close();toast('任务已保存');}catch(error){$('#task-error').textContent=error.message;}});
-document.addEventListener('click',async e=>{const b=e.target.closest('button');if(!b)return;try{if(b.dataset.route)navigate(b.dataset.route);else if(b.dataset.area){areaFilter=b.dataset.area;route='library';render();}else if(b.dataset.close)$(`#${b.dataset.close}`).close();else if(b.dataset.day){date=b.dataset.day;render();}else if(b.dataset.week){weekDate=b.dataset.week;render();}else if(b.dataset.filter){filter=b.dataset.filter;render();}else if(b.dataset.edit)editTask(b.dataset.edit);else if(b.dataset.complete)await action('toggleTask',{id:b.dataset.complete});else if(b.dataset.restore)await action('restoreTask',{id:b.dataset.restore});else if(b.dataset.postpone)await action('updateTask',{id:b.dataset.postpone,patch:{plannedDate:shift(date,1),scheduledMinute:null}});else if(b.dataset.habitEdit){const h=state.habits.find(x=>x.id===b.dataset.habitEdit),f=$('#habit-form');for(const k of ['id','title','time','sectionTitle','scope'])f.elements[k].value=h[k]||'';f.elements.isPlanningContext.checked=h.isPlanningContext;f.scrollIntoView({block:'center'});f.elements.title.focus();}else if(b.id==='delete-task'){await action('trashTask',{id:$('#task-form').elements.id.value});$('#task-dialog').close();toast('已移入垃圾箱，可撤销或恢复');}else if(b.id==='undo'){await action('undo');toast('已撤销');}else if(b.id==='clear-area'){areaFilter=null;render();}else if(b.id==='new-habit')$('#habit-form').reset();else if(b.id==='focus-reset')await action('focusReset');else if(b.id==='focus-finish')await action('focusFinish');else if(b.id==='export-data'){if(await unwrap(window.dango.exportData()))toast('备份已导出');}else if(b.id==='import-data'){const value=await unwrap(window.dango.importData());if(value){state=value;render();toast('备份已导入');}}else if(b.id==='import-calendar'){const value=await unwrap(window.dango.importCalendar());if(value){state=value;render();toast('日历已导入');}}else if(b.id==='command-open'||b.hasAttribute('data-command'))openCommand();}catch(error){toast(error.message);}});
-document.addEventListener('change',async e=>{if(e.target.dataset.habit){try{await action('toggleHabit',{id:e.target.dataset.habit,date});}catch(error){toast(error.message);render();}}});
-document.addEventListener('dragstart',e=>{const row=e.target.closest('[data-drag]');if(row)e.dataTransfer.setData('text/plain',row.dataset.drag);});document.addEventListener('dragover',e=>{const target=e.target.closest('[data-hour],[data-drop-date]');if(target)e.preventDefault();});document.addEventListener('drop',async e=>{const target=e.target.closest('[data-hour],[data-drop-date]');if(!target)return;e.preventDefault();const id=e.dataTransfer.getData('text/plain');if(!state.tasks.some(t=>t.id===id))return;try{await action('updateTask',{id,patch:{plannedDate:target.dataset.date||target.dataset.dropDate,scheduledMinute:target.dataset.hour?Number(target.dataset.hour)*60:null}});toast('已安排任务');}catch(error){toast(error.message);}});
-function openCommand(){$('#command-dialog').showModal();$('#command-search').value='';commandResults('');$('#command-search').focus();}
-function commandResults(q){$('#command-results').innerHTML=routes.filter(x=>x[2].includes(q)).map(([id,icon,title])=>`<button data-command-route="${id}">${title}</button>`).join('')+state.tasks.filter(t=>active(t)&&t.title.toLowerCase().includes(q.toLowerCase())).slice(0,10).map(t=>`<button data-command-task="${esc(t.id)}">${esc(t.title)}</button>`).join('');}
-$('#command-search').addEventListener('input',e=>commandResults(e.target.value));$('#command-results').addEventListener('click',e=>{const b=e.target.closest('button');if(!b)return;$('#command-dialog').close();if(b.dataset.commandRoute)navigate(b.dataset.commandRoute);else editTask(b.dataset.commandTask);});
-document.addEventListener('keydown',e=>{if(!(e.ctrlKey||e.metaKey))return;const key=e.key.toLowerCase();if(key==='k'){e.preventDefault();openCommand();}else if(key==='n'){e.preventDefault();navigate('capture');}else if(key===','){e.preventDefault();navigate('settings');}else if(/[1-6]/.test(key)&&key.length===1){e.preventDefault();navigate(routes[Number(key)-1][0]);}else if(key==='z'&&!/INPUT|TEXTAREA/.test(e.target.tagName)){e.preventDefault();action('undo').catch(error=>toast(error.message));}});
-window.dango.onState(value=>{const changed=state?.revision!==value.revision;state=value;if(changed&&!document.querySelector('dialog[open]')&&!/INPUT|TEXTAREA|SELECT/.test(document.activeElement?.tagName||''))render();else updateClock();});window.dango.onNavigate(navigate);setInterval(updateClock,1000);unwrap(window.dango.load()).then(value=>{state=value;render();}).catch(error=>{$('#view').textContent=`无法载入：${error.message}`;});
+"use strict";
+let state,
+  route = "today",
+  date = dayKey(new Date()),
+  weekDate = date,
+  filter = "all",
+  search = "",
+  areaFilter = null,
+  plan = null,
+  generating = false;
+const routes = [
+  ["today", "☀", "今天"],
+  ["week", "▦", "本周"],
+  ["library", "☷", "任务库"],
+  ["habits", "✓", "习惯 · SOP"],
+  ["review", "▥", "复盘"],
+  ["focus", "◴", "专注"],
+];
+const $ = (s) => document.querySelector(s),
+  esc = (s) =>
+    String(s ?? "").replace(
+      /[&<>"']/g,
+      (c) =>
+        ({
+          "&": "&amp;",
+          "<": "&lt;",
+          ">": "&gt;",
+          '"': "&quot;",
+          "'": "&#39;",
+        })[c],
+    );
+function dayKey(v) {
+  if (typeof v === "string" && /^\d{4}-\d{2}-\d{2}$/.test(v)) return v;
+  const d = new Date(v);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
+function shift(s, n) {
+  const d = new Date(`${s}T00:00:00`);
+  d.setDate(d.getDate() + n);
+  return dayKey(d);
+}
+function week(s) {
+  const d = new Date(`${s}T00:00:00`);
+  return shift(s, -((d.getDay() + 6) % 7));
+}
+function active(t) {
+  return !["completed", "trashed", "cancelled", "archived"].includes(t.status);
+}
+function onDate(t, d) {
+  return t.plannedDate && dayKey(t.plannedDate) === d;
+}
+function clock(n) {
+  return `${String(Math.floor(n / 60)).padStart(2, "0")}:${String(n % 60).padStart(2, "0")}`;
+}
+function duration(n) {
+  return n >= 60
+    ? `${Math.floor(n / 60)}h${n % 60 ? `${n % 60}m` : ""}`
+    : `${n}m`;
+}
+function toast(message) {
+  $("#toast").textContent = message;
+  $("#toast").hidden = false;
+  clearTimeout(toast.timer);
+  toast.timer = setTimeout(() => ($("#toast").hidden = true), 5000);
+}
+async function unwrap(promise) {
+  const response = await promise;
+  if (!response.ok) throw new Error(response.error);
+  return response.value;
+}
+async function action(name, payload = {}) {
+  state = await unwrap(window.dango.action(name, payload));
+  render();
+  return state;
+}
+function navigate(value) {
+  route = value === "capture" ? "today" : value;
+  render();
+  if (value === "capture") $("#capture-input")?.focus();
+}
+function areaName(t) {
+  return state.areas.find((a) => a.id === t.areaID)?.name || "未分类";
+}
+function header(title, subtitle, actions = "") {
+  return `<header class="page-head"><div><p class="eyebrow">${esc(subtitle)}</p><h1>${esc(title)}</h1></div><div class="head-actions">${actions}</div></header>`;
+}
+function empty(message) {
+  return `<div class="empty">${esc(message)}</div>`;
+}
+function taskRow(t) {
+  const done = t.status === "completed";
+  return `<div class="task-row" draggable="${t.status !== "trashed"}" data-drag="${esc(t.id)}"><button class="check ${done ? "done" : ""}" data-complete="${esc(t.id)}" aria-label="${done ? "取消完成" : "完成"}：${esc(t.title)}" ${t.status === "trashed" ? "disabled" : ""}>${done ? "✓" : ""}</button><div class="task-main"><button class="task-title ${done ? "done-title" : ""}" data-edit="${esc(t.id)}">${esc(t.title)}</button><div class="task-meta"><span>${esc(areaName(t))}</span>${t.scheduledMinute != null ? `<span>${clock(t.scheduledMinute)}</span>` : ""}${t.estimatedMinutes ? `<span>${duration(t.estimatedMinutes)}</span>` : ""}${t.plannedDate ? `<span>${dayKey(t.plannedDate)}</span>` : ""}${t.dueDate ? `<span>截止 ${dayKey(t.dueDate)}</span>` : ""}${t.recurrence ? "<span>↻ 重复</span>" : ""}</div></div>${t.status === "trashed" ? `<button data-restore="${esc(t.id)}">恢复</button>` : t.priority !== "none" ? `<span class="badge ${esc(t.priority)}">${{ high: "高", medium: "中", low: "低" }[t.priority]}优先级</span>` : ""}</div>`;
+}
+function captureForm() {
+  return `<form id="capture-form" class="card capture"><label for="capture-input">随手记</label><input id="capture-input" name="capture" placeholder="明天下午3点 写摘要 #工作 45m !高" required maxlength="1000"><button class="primary">添加 ↵</button></form>`;
+}
+function habits(d) {
+  const day = new Date(`${d}T00:00:00`);
+  return state.habits.filter(
+    (h) =>
+      h.scope === "everyday" ||
+      (day.getDay() === 0 &&
+        (h.scope === "sunday" ||
+          new Date(
+            day.getFullYear(),
+            day.getMonth(),
+            day.getDate() + 7,
+          ).getMonth() !== day.getMonth())),
+  );
+}
+function sessionMinutes(d) {
+  return state.sessions
+    .filter((s) => dayKey(s.startedAt) === d)
+    .reduce((sum, s) => sum + s.minutes, 0);
+}
+function render() {
+  if (!state) return;
+  $("#nav").innerHTML = routes
+    .map(
+      ([id, icon, title]) =>
+        `<button data-route="${id}" class="${route === id ? "active" : ""}" ${route === id ? 'aria-current="page"' : ""}><span class="nav-icon" aria-hidden="true">${icon}</span>${title}</button>`,
+    )
+    .join("");
+  $("#areas").innerHTML = state.areas
+    .map(
+      (a) =>
+        `<button class="area-nav" data-area="${esc(a.id)}"><span class="dot" aria-hidden="true"></span>${esc(a.name)}</button>`,
+    )
+    .join("");
+  $("#pet-note").textContent =
+    state.focus?.status === "running"
+      ? "正在专注，先把这一颗吃完。"
+      : `今天已完成 ${state.tasks.filter((t) => t.status === "completed" && t.completedAt && dayKey(t.completedAt) === dayKey(new Date())).length} 件事。按自己的节奏来。`;
+  const pages = {
+    today: todayPage,
+    week: weekPage,
+    library: libraryPage,
+    habits: habitsPage,
+    review: reviewPage,
+    focus: focusPage,
+    settings: settingsPage,
+  };
+  $("#view").innerHTML = (pages[route] || todayPage)();
+  bindForms();
+  updateClock();
+}
+function todayPage() {
+  const tasks = state.tasks.filter(
+      (t) => onDate(t, date) && t.status !== "trashed",
+    ),
+    pending = tasks.filter(active),
+    scheduled = pending.filter((t) => t.scheduledMinute != null),
+    events = state.events.filter(
+      (e) => dayKey(e.startDate) <= date && dayKey(e.endDate) >= date,
+    ),
+    h = habits(date),
+    done = h.filter((x) =>
+      (state.completions[date] || []).includes(x.id),
+    ).length;
+  const timeline = Array.from({ length: 17 }, (_, i) => {
+    const hour = i + 7,
+      items = scheduled.filter(
+        (t) => Math.floor(t.scheduledMinute / 60) === hour,
+      ),
+      e = events.filter(
+        (x) =>
+          !x.isAllDay &&
+          new Date(x.startDate).getHours() === hour &&
+          dayKey(x.startDate) === date,
+      ),
+      habit = h.filter((x) =>
+        new RegExp(`^${String(hour).padStart(2, "0")}:`).test(x.time || ""),
+      );
+    return `<div class="timeline-slot" data-hour="${hour}" data-date="${date}"><span class="time">${clock(hour * 60)}</span><div>${e.map((x) => `<div class="event">${esc(x.title)}<br>${new Date(x.startDate).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}–${new Date(x.endDate).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}</div>`).join("")}${habit.map((x) => `<div class="sop-block">${esc(x.title)}</div>`).join("")}${items.map(taskRow).join("")}</div></div>`;
+  }).join("");
+  return (
+    header(
+      `${date.slice(5).replace("-", "/")}，${date === dayKey(new Date()) ? "今天" : "明天"}`,
+      "把精力留给最重要的事",
+      `<button data-day="${dayKey(new Date())}">今天</button><button data-day="${shift(dayKey(new Date()), 1)}">明天 · 规划</button><button data-command>命令 <kbd>Ctrl K</kbd></button>`,
+    ) +
+    captureForm() +
+    `<div class="metrics"><div class="metric"><strong>${pending.length} 项</strong><small>待完成任务</small></div><div class="metric"><strong>${duration(scheduled.reduce((sum, t) => sum + (t.estimatedMinutes || 30), 0))}</strong><small>已排时间</small></div><div class="metric"><strong>${done} / ${h.length}</strong><small>当日 SOP</small></div></div><div class="columns"><section class="card timeline"><h2>日历 · 任务 · SOP</h2><p class="muted">把任务拖到对应时段，或在任务详情中设置时间。</p>${events
+      .filter((x) => x.isAllDay)
+      .map((x) => `<div class="event">全天 · ${esc(x.title)}</div>`)
+      .join(
+        "",
+      )}${timeline}</section><div><section class="card dark"><small>今天这一串</small><h2>${pending.length ? "一次做好一件事。" : "留一点空白，也很好。"}</h2><p>专注 ${duration(sessionMinutes(date))} · 完成 ${tasks.filter((t) => t.status === "completed").length} 项</p></section><section class="card"><h2>Top 3</h2>${
+      pending
+        .filter((t) => t.focusDate && dayKey(t.focusDate) === date)
+        .slice(0, 3)
+        .map(taskRow)
+        .join("") || empty("在任务详情中标记重点。")
+    }</section><section class="card"><h2>未排时间</h2>${
+      pending
+        .filter((t) => t.scheduledMinute == null)
+        .map(taskRow)
+        .join("") || empty("目前没有待排任务。")
+    }<button data-route="library">去任务库挑</button></section><section class="card pink"><h2>AI 明日计划</h2><form id="plan-form"><label for="plan-input">明日补充事项</label><textarea id="plan-input" rows="3" placeholder="一行写一件事，最多20条"></textarea><p class="muted">点击生成后，将活动任务、已导入日历、本周目标和 SOP 发给 OpenAI。确认后才保存任务。</p><button class="primary" ${generating ? "disabled" : ""}>${generating ? "正在生成…" : "生成明日计划"}</button></form></section>${plan ? planCard() : ""}</div></div>`
+  );
+}
+function planCard() {
+  return `<section class="card"><h2>团子的建议</h2><p>${esc(plan.summary)}</p><form id="accept-plan">${[...plan.top_three, ...plan.additional_tasks].map((t) => `<div class="plan-item"><input type="checkbox" id="suggest-${t.id}" name="selected" value="${t.id}" checked><label for="suggest-${t.id}"><strong>${esc(t.title)}</strong><p>${esc(t.reason)} · ${duration(t.estimated_minutes)}</p></label></div>`).join("")}<p>${esc(plan.workload_assessment)}</p><button class="primary">确认并安排到 ${esc(plan.date)}</button></form></section>`;
+}
+function weekPage() {
+  const start = week(weekDate),
+    days = Array.from({ length: 7 }, (_, i) => shift(start, i)),
+    p = state.weeks[start] || { goals: ["", "", ""], notes: "" };
+  return (
+    header(
+      `${start.slice(5)} — ${days[6].slice(5)}`,
+      "这一周，朝着三个方向前进",
+      `<button data-week="${shift(start, -7)}" aria-label="上一周">←</button><button data-week="${dayKey(new Date())}">本周</button><button data-week="${shift(start, 7)}" aria-label="下一周">→</button>`,
+    ) +
+    `<section class="card"><form id="week-form"><div class="goals">${[0, 1, 2].map((i) => `<label>目标 ${i + 1}<input name="goal${i}" value="${esc(p.goals[i] || "")}" maxlength="500" placeholder="这周想完成什么？"></label>`).join("")}</div><label>备注<textarea name="notes" rows="2">${esc(p.notes)}</textarea></label><button class="primary">保存本周目标</button></form></section><div class="week-grid">${days
+      .map(
+        (d, i) =>
+          `<section class="day-column ${d === dayKey(new Date()) ? "current" : ""}" data-drop-date="${d}"><h3>周${"一二三四五六日"[i]} · ${d.slice(5)}</h3>${
+            state.tasks
+              .filter((t) => onDate(t, d) && t.status !== "trashed")
+              .map(taskRow)
+              .join("") || empty("把任务拖到这一天")
+          }</section>`,
+      )
+      .join("")}</div><section class="card"><h2>待安排</h2>${
+      state.tasks
+        .filter((t) => active(t) && !t.plannedDate)
+        .map(taskRow)
+        .join("") || empty("任务已经安排好了。")
+    }</section>`
+  );
+}
+function libraryTasks() {
+  return state.tasks
+    .filter(
+      (t) =>
+        (filter === "trash"
+          ? t.status === "trashed"
+          : filter === "completed"
+            ? t.status === "completed"
+            : filter === "inbox"
+              ? t.status === "inbox"
+              : active(t)) &&
+        (!areaFilter || t.areaID === areaFilter) &&
+        `${t.title} ${t.notes} ${t.tags.join(" ")}`
+          .toLowerCase()
+          .includes(search.toLowerCase()),
+    )
+    .sort(
+      (a, b) =>
+        ({ high: 0, medium: 1, low: 2, none: 3 })[a.priority] -
+        { high: 0, medium: 1, low: 2, none: 3 }[b.priority],
+    );
+}
+function libraryPage() {
+  return (
+    header(
+      "任务库",
+      "先记下来，再慢慢理清。",
+      `<button id="undo" ${state.canUndo ? "" : "disabled"}>撤销</button>`,
+    ) +
+    captureForm() +
+    `<div class="filters">${[
+      ["all", "全部"],
+      ["inbox", "收件箱"],
+      ["completed", "已完成"],
+      ["trash", "垃圾箱"],
+    ]
+      .map(
+        ([id, title]) =>
+          `<button data-filter="${id}" class="${filter === id ? "selected" : ""}">${title}</button>`,
+      )
+      .join(
+        "",
+      )}<input id="search" placeholder="搜索标题、备注、标签" value="${esc(search)}" aria-label="搜索任务">${areaFilter ? '<button id="clear-area">清除领域筛选</button>' : ""}</div><section class="card" id="task-results">${libraryTasks().map(taskRow).join("") || empty("没有匹配的任务。")}</section>`
+  );
+}
+function habitsPage() {
+  const items = habits(date),
+    checked = state.completions[date] || [],
+    done = items.filter((h) => checked.includes(h.id)).length;
+  const sections = [...new Set(items.map((x) => x.sectionTitle))];
+  return (
+    header(
+      "习惯 · SOP",
+      "照顾好日常的小事。",
+      `<input id="habit-date" type="date" value="${date}" aria-label="打卡日期">`,
+    ) +
+    `<section class="card"><h2>已完成 ${done} / ${items.length}</h2><progress class="progress" value="${done}" max="${Math.max(1, items.length)}" aria-label="打卡进度"></progress></section>${sections
+      .map(
+        (section) =>
+          `<section class="card habit-group"><h2>${esc(section)}</h2>${items
+            .filter((h) => h.sectionTitle === section)
+            .map(
+              (h) =>
+                `<div class="habit-row"><label><input type="checkbox" data-habit="${esc(h.id)}" ${checked.includes(h.id) ? "checked" : ""}><span class="time">${esc(h.time || "随时")}</span><span>${esc(h.title)}</span></label><button data-habit-edit="${esc(h.id)}">编辑</button></div>`,
+            )
+            .join("")}</section>`,
+      )
+      .join(
+        "",
+      )}<section class="card"><h2>编辑习惯</h2><form id="habit-form"><input name="id" type="hidden"><div class="form-grid"><label>习惯名称<input name="title" required maxlength="300"></label><label>时间（可选）<input type="time" name="time"></label><label>分组<input name="sectionTitle" value="自定义"></label><label>频率<select name="scope"><option value="everyday">每天</option><option value="sunday">每周日</option><option value="monthEnd">月末周日</option></select></label></div><label class="check-label"><input name="isPlanningContext" type="checkbox" checked>提供给 AI 作为固定节奏</label><div class="actions"><button class="primary">保存习惯</button><button type="button" id="new-habit">清空表单</button></div></form></section>`
+  );
+}
+function reviewPage() {
+  const review = state.reviews[date] || {},
+    complete = state.tasks.filter(
+      (t) => t.completedAt && dayKey(t.completedAt) === date,
+    ),
+    pending = state.tasks.filter((t) => active(t) && onDate(t, date));
+  return (
+    header(
+      "今日复盘",
+      "记下进展，也接住没完成的事。",
+      `<input id="review-date" type="date" value="${date}" aria-label="复盘日期">`,
+    ) +
+    `<div class="metrics"><div class="metric"><strong>${complete.length}</strong><small>完成任务</small></div><div class="metric"><strong>${duration(sessionMinutes(date))}</strong><small>专注时间</small></div><div class="metric"><strong>${pending.length}</strong><small>待处理任务</small></div></div><div class="review-grid"><section class="card"><h2>今天的记录</h2><form id="review-form"><div class="form-grid">${[
+      ["energy", "精力"],
+      ["mood", "心情"],
+    ]
+      .map(
+        ([name, title]) =>
+          `<label>${title}<select name="${name}">${[1, 2, 3, 4, 5].map((n) => `<option value="${n}" ${Number(review[name] || 3) === n ? "selected" : ""}>${n} / 5</option>`).join("")}</select></label>`,
+      )
+      .join(
+        "",
+      )}</div><label>今天推进了什么？<textarea name="progress" rows="3">${esc(review.progress)}</textarea></label><label>遇到的阻碍<textarea name="blocker" rows="3">${esc(review.blocker)}</textarea></label><label>明天第一件小事<textarea name="firstAction" rows="2">${esc(review.firstAction)}</textarea></label><button class="primary">保存复盘</button>${review.savedAt ? `<p class="muted">上次保存 ${esc(new Date(review.savedAt).toLocaleString())}</p>` : ""}</form></section><section class="card"><h2>还没完成的事</h2>${pending.map((t) => taskRow(t) + `<button class="ghost" data-postpone="${esc(t.id)}">顺延到明天 →</button>`).join("") || empty("今天的任务已处理完。")}</section></div>`
+  );
+}
+function focusPage() {
+  const f = state.focus,
+    started = f && ["running", "paused"].includes(f.status);
+  return (
+    header("专注", "一次吃掉一颗团子。") +
+    `<section class="card focus-card"><div class="mascot" aria-hidden="true"><i></i><i>•ᴗ•</i><i></i></div><h2>${esc(started ? f.title : "先选一件事")}</h2><form id="focus-form"><label>正在做<select name="taskID" ${started ? "disabled" : ""}><option value="">自由专注</option>${state.tasks
+      .filter(active)
+      .map(
+        (t) =>
+          `<option value="${esc(t.id)}" ${f?.taskID === t.id ? "selected" : ""}>${esc(t.title)}</option>`,
+      )
+      .join(
+        "",
+      )}</select></label><div class="clock" id="focus-clock" aria-label="专注剩余时间">25:00</div><label>专注时长<select name="minutes" ${started ? "disabled" : ""}><option value="25">25 分钟</option><option value="50">50 分钟</option><option value="90">90 分钟</option></select></label><div class="actions"><button class="primary">${f?.status === "running" ? "暂停" : f?.status === "paused" ? "继续专注" : "开始专注"}</button><button type="button" id="focus-reset">重来</button><button type="button" id="focus-finish" ${started ? "" : "disabled"}>提前完成</button></div></form><p class="muted">计时按实际经过时间计算；关闭主窗口后仍在托盘运行。</p></section><section class="card"><h2>今天这一串 · ${duration(sessionMinutes(dayKey(new Date())))}</h2>${
+      state.sessions
+        .filter((s) => dayKey(s.startedAt) === dayKey(new Date()))
+        .map(
+          (s) =>
+            `<div class="session"><span>${esc(s.taskTitle)}</span><strong>${duration(s.minutes)}</strong></div>`,
+        )
+        .join("") || empty("从一段不被打扰的时间开始。")
+    }</section>`
+  );
+}
+function settingsPage() {
+  const s = state.settings;
+  return (
+    header("设置", "把团子调成适合你的样子。") +
+    `<section class="card settings-card"><h2>AI 与提醒</h2><form id="settings-form"><label>OpenAI 模型<input name="model" value="${esc(s.model)}" required maxlength="100"></label><div class="form-grid"><label>周一至周六提醒<input name="dailyTime" type="time" value="${s.dailyTime}" required></label><label>周日计划提醒<input name="weeklyTime" type="time" value="${s.weeklyTime}" required></label></div><label class="check-label"><input name="reminders" type="checkbox" ${s.reminders ? "checked" : ""}>应用运行时显示计划提醒</label><label class="check-label"><input name="pet" type="checkbox" ${s.pet ? "checked" : ""}>显示可拖动的桌面团子</label><button class="primary">保存设置</button></form><hr><form id="key-form"><label>OpenAI API Key<input type="password" name="key" autocomplete="off" placeholder="${state.hasKey ? "已保存，输入新密钥可替换" : "输入 API Key"}"></label><p class="muted">密钥由系统加密保存，界面不会读取已保存的密钥。留空并保存可清除密钥。</p><button>保存密钥</button></form></section><section class="card settings-card"><h2>日历与备份</h2><p>从 Apple 或 Google Calendar 导出 .ics 文件后导入。支持时区和未来 60 天的重复事件；再次导入可更新日历快照。</p><p class="muted">Windows 首版使用日历文件导入，尚不提供 Apple Calendar 原生访问或 Google OAuth 实时同步。</p><div class="actions"><button id="import-calendar">导入日历 .ics</button><button id="export-data">导出备份</button><button id="import-data">导入备份 / Mac 数据</button></div><p class="muted">可分别导入 Mac 的 task-store.json、daily-sop.json、journal.json。相同 ID 的记录会更新，密钥不会随备份导出。</p></section><section class="card settings-card"><h2>关于明日团子</h2><p>Windows 桌面版 · ${esc(state.version)}</p><p class="settings-status muted">数据位置：${esc(state.dataPath)}</p><p>快捷键：Ctrl N 随手记 · Ctrl K 命令 · Ctrl 1–6 切页 · Ctrl Shift Space 全局呼出</p></section>`
+  );
+}
+function updateClock() {
+  const f = state?.focus;
+  const ms =
+    f?.status === "running"
+      ? Math.max(0, f.endsAt - Date.now())
+      : (f?.remainingMs ?? 25 * 60000);
+  const seconds = Math.ceil(ms / 1000);
+  if ($("#focus-clock"))
+    $("#focus-clock").textContent =
+      `${String(Math.floor(seconds / 60)).padStart(2, "0")}:${String(seconds % 60).padStart(2, "0")}`;
+}
+function form(id, handler) {
+  const element = $(`#${id}`);
+  if (element)
+    element.addEventListener("submit", async (event) => {
+      event.preventDefault();
+      const button = element.querySelector(
+        "button[type=submit],button:not([type])",
+      );
+      if (button) button.disabled = true;
+      try {
+        await handler(new FormData(element));
+      } catch (e) {
+        toast(e.message);
+      } finally {
+        if (button) button.disabled = false;
+      }
+    });
+}
+function bindForms() {
+  form("capture-form", async (data) => {
+    await action("addTask", {
+      text: data.get("capture"),
+      date: route === "today" ? date : null,
+    });
+    toast("已记下这件事");
+    $("#capture-input")?.focus();
+  });
+  form("week-form", async (data) => {
+    await action("week", {
+      date: weekDate,
+      goals: [0, 1, 2].map((i) => data.get(`goal${i}`)),
+      notes: data.get("notes"),
+    });
+    toast("本周目标已保存");
+  });
+  form("habit-form", async (data) => {
+    await action("saveHabit", {
+      id: data.get("id") || undefined,
+      title: data.get("title"),
+      time: data.get("time"),
+      sectionTitle: data.get("sectionTitle"),
+      scope: data.get("scope"),
+      isPlanningContext: data.has("isPlanningContext"),
+    });
+    toast("习惯已保存");
+  });
+  form("review-form", async (data) => {
+    await action("review", { date, ...Object.fromEntries(data) });
+    toast("复盘已保存");
+  });
+  form("focus-form", async (data) => {
+    await action(
+      state.focus?.status === "running" ? "focusPause" : "focusStart",
+      { taskID: data.get("taskID"), minutes: Number(data.get("minutes")) },
+    );
+  });
+  form("settings-form", async (data) => {
+    await action("settings", {
+      ...Object.fromEntries(data),
+      pet: data.has("pet"),
+      reminders: data.has("reminders"),
+    });
+    toast("设置已保存");
+  });
+  form("key-form", async (data) => {
+    state = await unwrap(window.dango.saveKey(data.get("key")));
+    render();
+    toast("密钥设置已更新");
+  });
+  form("plan-form", async (data) => {
+    const input = $("#plan-input").value;
+    generating = true;
+    render();
+    try {
+      plan = await unwrap(
+        window.dango.generate(shift(dayKey(new Date()), 1), input),
+      );
+    } finally {
+      generating = false;
+      render();
+    }
+  });
+  form("accept-plan", async (data) => {
+    state = await unwrap(
+      window.dango.acceptPlan(plan.id, data.getAll("selected")),
+    );
+    date = plan.date;
+    plan = null;
+    render();
+    toast("计划已保存，可在任务详情中调整");
+  });
+  $("#search")?.addEventListener("input", (e) => {
+    search = e.target.value;
+    $("#task-results").innerHTML =
+      libraryTasks().map(taskRow).join("") || empty("没有匹配的任务。");
+  });
+  $("#habit-date")?.addEventListener("change", (e) => {
+    if (e.target.value) {
+      date = e.target.value;
+      render();
+    }
+  });
+  $("#review-date")?.addEventListener("change", (e) => {
+    if (e.target.value) {
+      date = e.target.value;
+      render();
+    }
+  });
+}
+function editTask(id) {
+  const t = state.tasks.find((x) => x.id === id);
+  if (!t || t.status === "trashed") return;
+  const f = $("#task-form");
+  f.reset();
+  $("#task-area").innerHTML =
+    '<option value="">未分类</option>' +
+    state.areas
+      .map((a) => `<option value="${esc(a.id)}">${esc(a.name)}</option>`)
+      .join("");
+  for (const k of [
+    "id",
+    "title",
+    "status",
+    "areaID",
+    "priority",
+    "estimatedMinutes",
+    "weeklyGoalIndex",
+    "project",
+    "notes",
+  ])
+    f.elements[k].value = t[k] ?? "";
+  for (const k of ["plannedDate", "dueDate"])
+    f.elements[k].value = t[k] ? dayKey(t[k]) : "";
+  f.elements.time.value =
+    t.scheduledMinute != null ? clock(t.scheduledMinute) : "";
+  f.elements.tags.value = t.tags.join(", ");
+  f.elements.focus.checked = !!t.focusDate;
+  f.elements.repeat.value = t.recurrence?.frequency || "";
+  f.elements.interval.value = t.recurrence?.interval || 1;
+  $("#task-error").textContent = "";
+  $("#task-dialog").showModal();
+}
+$("#task-form").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const f = e.target,
+    data = new FormData(f),
+    old = state.tasks.find((t) => t.id === data.get("id"));
+  const patch = Object.fromEntries(data);
+  delete patch.id;
+  delete patch.time;
+  delete patch.focus;
+  delete patch.repeat;
+  delete patch.interval;
+  patch.areaID ||= null;
+  patch.plannedDate ||= null;
+  patch.dueDate ||= null;
+  patch.tags = patch.tags
+    .split(/[,，]/)
+    .map((x) => x.trim())
+    .filter(Boolean);
+  patch.estimatedMinutes = patch.estimatedMinutes
+    ? Number(patch.estimatedMinutes)
+    : null;
+  patch.weeklyGoalIndex =
+    patch.weeklyGoalIndex !== "" ? Number(patch.weeklyGoalIndex) : null;
+  patch.scheduledMinute = data.get("time")
+    ? data
+        .get("time")
+        .split(":")
+        .reduce((h, v, i) => h + Number(v) * (i ? 1 : 60), 0)
+    : null;
+  patch.focusDate = data.has("focus")
+    ? patch.plannedDate || dayKey(new Date())
+    : null;
+  patch.recurrence = data.get("repeat")
+    ? {
+        frequency: data.get("repeat"),
+        interval: Number(data.get("interval")),
+        weekdays: old.recurrence?.weekdays || [],
+        endDate: old.recurrence?.endDate || null,
+      }
+    : null;
+  try {
+    await action("updateTask", { id: data.get("id"), patch });
+    $("#task-dialog").close();
+    toast("任务已保存");
+  } catch (error) {
+    $("#task-error").textContent = error.message;
+  }
+});
+document.addEventListener("click", async (e) => {
+  const b = e.target.closest("button");
+  if (!b) return;
+  try {
+    if (b.dataset.route) navigate(b.dataset.route);
+    else if (b.dataset.area) {
+      areaFilter = b.dataset.area;
+      route = "library";
+      render();
+    } else if (b.dataset.close) $(`#${b.dataset.close}`).close();
+    else if (b.dataset.day) {
+      date = b.dataset.day;
+      render();
+    } else if (b.dataset.week) {
+      weekDate = b.dataset.week;
+      render();
+    } else if (b.dataset.filter) {
+      filter = b.dataset.filter;
+      render();
+    } else if (b.dataset.edit) editTask(b.dataset.edit);
+    else if (b.dataset.complete)
+      await action("toggleTask", { id: b.dataset.complete });
+    else if (b.dataset.restore)
+      await action("restoreTask", { id: b.dataset.restore });
+    else if (b.dataset.postpone)
+      await action("updateTask", {
+        id: b.dataset.postpone,
+        patch: { plannedDate: shift(date, 1), scheduledMinute: null },
+      });
+    else if (b.dataset.habitEdit) {
+      const h = state.habits.find((x) => x.id === b.dataset.habitEdit),
+        f = $("#habit-form");
+      for (const k of ["id", "title", "time", "sectionTitle", "scope"])
+        f.elements[k].value = h[k] || "";
+      f.elements.isPlanningContext.checked = h.isPlanningContext;
+      f.scrollIntoView({ block: "center" });
+      f.elements.title.focus();
+    } else if (b.id === "delete-task") {
+      await action("trashTask", { id: $("#task-form").elements.id.value });
+      $("#task-dialog").close();
+      toast("已移入垃圾箱，可撤销或恢复");
+    } else if (b.id === "undo") {
+      await action("undo");
+      toast("已撤销");
+    } else if (b.id === "clear-area") {
+      areaFilter = null;
+      render();
+    } else if (b.id === "new-habit") $("#habit-form").reset();
+    else if (b.id === "focus-reset") await action("focusReset");
+    else if (b.id === "focus-finish") await action("focusFinish");
+    else if (b.id === "export-data") {
+      if (await unwrap(window.dango.exportData())) toast("备份已导出");
+    } else if (b.id === "import-data") {
+      const value = await unwrap(window.dango.importData());
+      if (value) {
+        state = value;
+        render();
+        toast("备份已导入");
+      }
+    } else if (b.id === "import-calendar") {
+      const value = await unwrap(window.dango.importCalendar());
+      if (value) {
+        state = value;
+        render();
+        toast("日历已导入");
+      }
+    } else if (b.id === "command-open" || b.hasAttribute("data-command"))
+      openCommand();
+  } catch (error) {
+    toast(error.message);
+  }
+});
+document.addEventListener("change", async (e) => {
+  if (e.target.dataset.habit) {
+    try {
+      await action("toggleHabit", { id: e.target.dataset.habit, date });
+    } catch (error) {
+      toast(error.message);
+      render();
+    }
+  }
+});
+document.addEventListener("dragstart", (e) => {
+  const row = e.target.closest("[data-drag]");
+  if (row) e.dataTransfer.setData("text/plain", row.dataset.drag);
+});
+document.addEventListener("dragover", (e) => {
+  const target = e.target.closest("[data-hour],[data-drop-date]");
+  if (target) e.preventDefault();
+});
+document.addEventListener("drop", async (e) => {
+  const target = e.target.closest("[data-hour],[data-drop-date]");
+  if (!target) return;
+  e.preventDefault();
+  const id = e.dataTransfer.getData("text/plain");
+  if (!state.tasks.some((t) => t.id === id)) return;
+  try {
+    await action("updateTask", {
+      id,
+      patch: {
+        plannedDate: target.dataset.date || target.dataset.dropDate,
+        scheduledMinute: target.dataset.hour
+          ? Number(target.dataset.hour) * 60
+          : null,
+      },
+    });
+    toast("已安排任务");
+  } catch (error) {
+    toast(error.message);
+  }
+});
+function openCommand() {
+  $("#command-dialog").showModal();
+  $("#command-search").value = "";
+  commandResults("");
+  $("#command-search").focus();
+}
+function commandResults(q) {
+  $("#command-results").innerHTML =
+    routes
+      .filter((x) => x[2].includes(q))
+      .map(
+        ([id, icon, title]) =>
+          `<button data-command-route="${id}">${title}</button>`,
+      )
+      .join("") +
+    state.tasks
+      .filter(
+        (t) => active(t) && t.title.toLowerCase().includes(q.toLowerCase()),
+      )
+      .slice(0, 10)
+      .map(
+        (t) =>
+          `<button data-command-task="${esc(t.id)}">${esc(t.title)}</button>`,
+      )
+      .join("");
+}
+$("#command-search").addEventListener("input", (e) =>
+  commandResults(e.target.value),
+);
+$("#command-results").addEventListener("click", (e) => {
+  const b = e.target.closest("button");
+  if (!b) return;
+  $("#command-dialog").close();
+  if (b.dataset.commandRoute) navigate(b.dataset.commandRoute);
+  else editTask(b.dataset.commandTask);
+});
+document.addEventListener("keydown", (e) => {
+  if (!(e.ctrlKey || e.metaKey)) return;
+  const key = e.key.toLowerCase();
+  if (key === "k") {
+    e.preventDefault();
+    openCommand();
+  } else if (key === "n") {
+    e.preventDefault();
+    navigate("capture");
+  } else if (key === ",") {
+    e.preventDefault();
+    navigate("settings");
+  } else if (/[1-6]/.test(key) && key.length === 1) {
+    e.preventDefault();
+    navigate(routes[Number(key) - 1][0]);
+  } else if (key === "z" && !/INPUT|TEXTAREA/.test(e.target.tagName)) {
+    e.preventDefault();
+    action("undo").catch((error) => toast(error.message));
+  }
+});
+window.dango.onState((value) => {
+  const changed = state?.revision !== value.revision;
+  state = value;
+  if (
+    changed &&
+    !document.querySelector("dialog[open]") &&
+    !/INPUT|TEXTAREA|SELECT/.test(document.activeElement?.tagName || "")
+  )
+    render();
+  else updateClock();
+});
+window.dango.onNavigate(navigate);
+setInterval(updateClock, 1000);
+unwrap(window.dango.load())
+  .then((value) => {
+    state = value;
+    render();
+  })
+  .catch((error) => {
+    $("#view").textContent = `无法载入：${error.message}`;
+  });

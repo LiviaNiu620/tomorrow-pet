@@ -101,8 +101,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             object: nil,
             queue: .main
         ) { [weak self] notification in
-            Task { @MainActor in
-                if notification.object as? Bool == true {
+            let shouldShow = notification.object as? Bool == true
+            Task { @MainActor [weak self] in
+                if shouldShow {
                     self?.petPanelController?.show()
                 } else {
                     self?.petPanelController?.hide()
