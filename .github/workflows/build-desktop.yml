@@ -1,0 +1,78 @@
+name: Build desktop apps
+on:
+  push:
+    branches: [main, redesign-dango, 'codex/**']
+    tags: ['v*']
+  pull_request:
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: desktop-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  macos:
+    name: macOS ${{ matrix.arch }}
+    runs-on: macos-14
+    strategy:
+      fail-fast: false
+      matrix:
+        arch: [arm64, x86_64]
+    env:
+      DANGO_ARCH: ${{ matrix.arch }}
+      DEVELOPER_DIR: /Applications/Xcode_16.2.app/Contents/Developer
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify Swift 6 toolchain
+        run: swift --version
+      - name: Core tests on runner architecture
+        run: DANGO_ARCH="$(uname -m)" ./script/build_and_run.sh --test
+      - name: Package application
+        run: ./script/package_macos.sh
+      - uses: actions/upload-artifact@v4
+        with:
+          name: TomorrowPet-macOS-${{ matrix.arch }}
+          path: dist/releases/*
+          if-no-files-found: error
+  windows:
+    name: Windows x64
+    runs-on: windows-latest
+    defaults:
+      run:
+        working-directory: windows
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: windows/package-lock.json
+      - run: npm ci
+      - run: npm run check
+      - run: npm test
+      - run: npm run smoke
+      - name: Build installer and portable archive
+        run: npm run dist
+        env:
+          CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+      - name: Checksums
+        shell: pwsh
+        run: |
+          Get-ChildItem ../dist/windows -File | Where-Object { $_.Extension -in '.exe', '.zip' } | ForEach-Object {
+            $hash = Get-FileHash $_.FullName -Algorithm SHA256
+            "$($hash.Hash.ToLower())  $($_.Name)"
+          } | Set-Content ../dist/windows/SHA256SUMS.txt
+      - uses: actions/upload-artifact@v4
+        with:
+          name: TomorrowPet-Windows-x64
+          path: |
+            dist/windows/*.exe
+            dist/windows/*.zip
+            dist/windows/SHA256SUMS.txt
+          if-no-files-found: error
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: Windows-render-check
+          path: windows/dist-smoke/*.png
+          if-no-files-found: ignore

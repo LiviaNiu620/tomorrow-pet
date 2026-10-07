@@ -3,3 +3,7 @@ dist/
 .DS_Store
 *.xcuserstate
 *.swp
+node_modules/
+.npm-cache/
+windows/dist-smoke/
+dist-smoke/

@@ -242,7 +242,7 @@ struct OpenAITaskBreakdownService {
         return decoder
     }
 
-    private static let stepSchema: [String: Any] = [
+    private static var stepSchema: [String: Any] { [
         "type": "object",
         "properties": [
             "step_id": ["type": "string"],
@@ -261,9 +261,9 @@ struct OpenAITaskBreakdownService {
             "planned_date", "due_date", "completion_criteria", "depends_on_step_ids"
         ],
         "additionalProperties": false
-    ]
+    ] }
 
-    private static let breakdownSchema: [String: Any] = [
+    private static var breakdownSchema: [String: Any] { [
         "type": "object",
         "properties": [
             "summary": ["type": "string"],
@@ -272,5 +272,5 @@ struct OpenAITaskBreakdownService {
         ],
         "required": ["summary", "steps", "risks"],
         "additionalProperties": false
-    ]
+    ] }
 }

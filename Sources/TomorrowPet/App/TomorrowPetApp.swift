@@ -9,18 +9,24 @@ struct TomorrowPetApp: App {
     @StateObject private var preferences = AppPreferences.shared
     @StateObject private var calendarService = CalendarService.shared
     @StateObject private var googleCalendarService = GoogleCalendarService.shared
+    @StateObject private var journal = JournalStore.shared
+    @StateObject private var router = AppRouter.shared
+    @StateObject private var focus = FocusTimer.shared
 
     var body: some Scene {
         WindowGroup(AppConstants.name, id: "main") {
-            ContentView(
+            RootView(
                 store: store,
                 sopStore: sopStore,
                 preferences: preferences,
-                calendarService: calendarService
+                calendarService: calendarService,
+                journal: journal,
+                router: router,
+                focus: focus
             )
-            .tint(AppTheme.accent)
         }
-        .defaultSize(width: 1180, height: 760)
+        .windowStyle(.hiddenTitleBar)
+        .defaultSize(width: 1440, height: 900)
         .commands {
             CommandGroup(replacing: .undoRedo) {
                 Button("撤销任务操作") {
@@ -41,16 +47,29 @@ struct TomorrowPetApp: App {
                 }
                 .keyboardShortcut("p", modifiers: [.command, .shift])
 
-                Button("打开每日 SOP") {
+                Button("打开习惯 · SOP") {
                     NotificationCenter.default.post(name: .openDailySOP, object: nil)
                 }
                 .keyboardShortcut("s", modifiers: [.command, .shift])
+
+                Button("开始 / 暂停专注") {
+                    FocusTimer.shared.toggle()
+                }
+                .keyboardShortcut("f", modifiers: [.command, .shift])
+
+                Button("今日复盘") {
+                    NotificationCenter.default.post(name: .openReview, object: nil)
+                }
+                .keyboardShortcut("r", modifiers: [.command, .shift])
             }
         }
 
-        MenuBarExtra(AppConstants.name, systemImage: "dog.fill") {
+        MenuBarExtra {
             MenuBarContentView()
+        } label: {
+            MenuBarLabel()
         }
+        .menuBarExtraStyle(.window)
 
         Settings {
             SettingsView(
@@ -66,6 +85,7 @@ struct TomorrowPetApp: App {
 final class AppDelegate: NSObject, NSApplicationDelegate {
     private var petPanelController: PetPanelController?
     private var petObserver: NSObjectProtocol?
+    private var sopObserver: NSObjectProtocol?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         NSApp.setActivationPolicy(.regular)
@@ -81,8 +101,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             object: nil,
             queue: .main
         ) { [weak self] notification in
-            Task { @MainActor in
-                if notification.object as? Bool == true {
+            let shouldShow = notification.object as? Bool == true
+            Task { @MainActor [weak self] in
+                if shouldShow {
                     self?.petPanelController?.show()
                 } else {
                     self?.petPanelController?.hide()
@@ -90,8 +111,27 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             }
         }
 
+        _ = AppRouter.shared
+        GlobalHotKey.shared.onPress = {
+            AppWindowActivator.showMainWindow()
+            AppRouter.shared.go(.today)
+            AppRouter.shared.captureFocusRequest = UUID()
+        }
+        GlobalHotKey.shared.register()
+
+        sopObserver = NotificationCenter.default.addObserver(
+            forName: .sopRemindersChanged,
+            object: nil,
+            queue: .main
+        ) { _ in
+            Task { @MainActor in
+                await ReminderService.shared.scheduleSOPReminders(blocks: DailySOPStore.shared.allTimeBlocks)
+            }
+        }
+
         Task {
             await ReminderService.shared.configure(preferences: AppPreferences.shared)
+            await ReminderService.shared.scheduleSOPReminders(blocks: DailySOPStore.shared.allTimeBlocks)
             await GoogleCalendarService.shared.restoreConnection()
             await CalendarService.shared.refreshTomorrow()
             await CalendarService.shared.refreshUpcomingWeek()

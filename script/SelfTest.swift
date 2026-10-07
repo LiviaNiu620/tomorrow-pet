@@ -34,7 +34,11 @@ struct TomorrowPetSelfTests {
         try testBreakdownCreatesLinkedTasksWithoutDuplicates()
         try testLegacyTaskDecoding()
         try testQuickAddStaysInDestinationAndUndoesOnce()
-        print("TomorrowPet self-tests passed: 31/31")
+        try testQuickCaptureParsing()
+        try testDayPlannerCapacityAndPlacement()
+        try testScheduleAndPostpone()
+        try testSOPBlocksAndTimeParsing()
+        print("TomorrowPet self-tests passed: 35/35")
     }
 
     private static func testQuickAddStaysInDestinationAndUndoesOnce() throws {
@@ -52,6 +56,71 @@ struct TomorrowPetSelfTests {
             try expect(!store.canUndo, "Quick add must create a single undo entry")
             try expect(store.addTask(title: "  ", areaID: nil, in: destination) == nil, "Empty titles must not create tasks")
         }
+    }
+
+    private static func testQuickCaptureParsing() throws {
+        let calendar = Calendar(identifier: .gregorian)
+        let monday = try require(calendar.date(from: DateComponents(year: 2026, month: 10, day: 5)))
+        let areas = ["工作", "学习"]
+        var parsed = QuickCaptureParser.parse("明天下午3点 写 CEUS 摘要 #工作 45m !高", areaNames: areas, referenceDate: monday, calendar: calendar)
+        try expect(parsed.title == "写 CEUS 摘要", "Title must exclude parsed tokens, got \(parsed.title)")
+        try expect(parsed.minute == 15 * 60, "下午3点 must be 15:00")
+        try expect(parsed.duration == 45, "45m must be 45 minutes")
+        try expect(parsed.areaName == "工作", "#工作 must match the area")
+        try expect(parsed.priority == .high, "!高 must be high priority")
+        try expect(parsed.date.map { calendar.isDate($0, inSameDayAs: calendar.date(byAdding: .day, value: 1, to: monday)!) } == true, "明天 must be Tuesday")
+        parsed = QuickCaptureParser.parse("周四 投递 3 个岗位 1.5h #求职", areaNames: areas, referenceDate: monday, calendar: calendar)
+        try expect(parsed.duration == 90, "1.5h must be 90 minutes")
+        try expect(parsed.unknownTag == "求职" && parsed.areaName == nil, "Unknown tags stay tags")
+        try expect(parsed.date.map { calendar.component(.weekday, from: $0) } == 5, "周四 must be Thursday")
+        try expect(parsed.title == "投递 3 个岗位", "Plain numbers must stay in the title")
+        parsed = QuickCaptureParser.parse("回复 R2 第 3 条", areaNames: areas, referenceDate: monday, calendar: calendar)
+        try expect(parsed.title == "回复 R2 第 3 条" && !parsed.hasStructure, "Text without tokens must be untouched")
+    }
+
+    private static func testDayPlannerCapacityAndPlacement() throws {
+        let blocks = [
+            SOPTimeBlock(id: "a", title: "早晨", start: 420, end: 540, scope: .everyday, remind: false, tintName: "orange"),
+            SOPTimeBlock(id: "b", title: "午饭", start: 720, end: 780, scope: .everyday, remind: false, tintName: "pink")
+        ]
+        let windows = DayPlanner.freeWindows(blocks: blocks)
+        try expect(windows == [MinuteRange(start: 540, end: 720), MinuteRange(start: 780, end: 1440)], "Free windows must skip SOP blocks")
+        let available = DayPlanner.availableMinutes(blocks: blocks, busy: [MinuteRange(start: 600, end: 660), MinuteRange(start: 630, end: 690)])
+        try expect(available == 180 + 660 - 90, "Overlapping events must be merged, got \(available)")
+        let placed = DayPlanner.autoPlace(durations: [90, 60], blocks: blocks, busy: [MinuteRange(start: 600, end: 660)], notBefore: 540)
+        try expect(placed[0] == 780, "90 minutes must skip the 60-minute gap and land after lunch, got \(String(describing: placed[0]))")
+        try expect(placed[1] == 540, "60 minutes must fit before the meeting")
+    }
+
+    private static func testScheduleAndPostpone() throws {
+        let store = TaskStore(fileURL: FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString), persistsChanges: false)
+        let calendar = Calendar.current
+        let today = calendar.startOfDay(for: .now)
+        let tomorrow = try require(calendar.date(byAdding: .day, value: 1, to: today))
+        let task = try require(store.addTask(title: "写方法部分"))
+        store.schedule(task.id, on: today, minute: 570)
+        try expect(store.task(id: task.id)?.scheduledMinute == 570 && store.task(id: task.id)?.status == .planned, "Schedule must set minute and status")
+        store.setFocus(task.id, on: today, isFocus: true)
+        try expect(store.focusTasks(on: today).map(\.id) == [task.id], "Focus task must appear in Top 3")
+        store.postpone(task.id, to: tomorrow)
+        let moved = try require(store.task(id: task.id))
+        try expect(moved.isPlanned(on: tomorrow) && moved.scheduledMinute == nil && moved.postponeCount == 1, "Postpone must move the task and count it")
+        try expect(store.focusTasks(on: tomorrow).count == 1, "A postponed focus task stays a focus task")
+        store.undoLastAction()
+        try expect(store.task(id: task.id)?.isPlanned(on: today) == true, "Postpone must be undoable")
+    }
+
+    private static func testSOPBlocksAndTimeParsing() throws {
+        try expect(DailySOPTemplate.startMinute(of: "08:30–09:00") == 510, "Ranges must parse their start")
+        try expect(DailySOPTemplate.startMinute(of: "09:10 前") == 550, "Suffixes must be ignored")
+        try expect(DailySOPTemplate.startMinute(of: "24:00") == 1440, "24:00 must parse")
+        try expect(DailySOPTemplate.startMinute(of: "周日晚上") == nil, "Text without a time must be nil")
+        let calendar = Calendar(identifier: .gregorian)
+        let monday = try require(calendar.date(from: DateComponents(year: 2026, month: 10, day: 5)))
+        let sunday = try require(calendar.date(from: DateComponents(year: 2026, month: 10, day: 11)))
+        let config = DailySOPTemplate.defaultConfiguration
+        try expect(!DailySOPTemplate.blocks(for: monday, configuration: config, calendar: calendar).contains { $0.scope == .sunday }, "Weekdays must not include Sunday blocks")
+        try expect(DailySOPTemplate.blocks(for: sunday, configuration: config, calendar: calendar).contains { $0.scope == .sunday }, "Sundays must include Sunday blocks")
     }
 
     private static func testHorizonClassification() throws {

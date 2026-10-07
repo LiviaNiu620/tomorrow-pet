@@ -5,6 +5,10 @@ extension Notification.Name {
     static let openWeeklyPlanner = Notification.Name("TomorrowPet.openWeeklyPlanner")
     static let openDailySOP = Notification.Name("TomorrowPet.openDailySOP")
     static let showQuickAdd = Notification.Name("TomorrowPet.showQuickAdd")
+    static let openFocus = Notification.Name("TomorrowPet.openFocus")
+    static let openReview = Notification.Name("TomorrowPet.openReview")
+    static let showCommandPalette = Notification.Name("TomorrowPet.showCommandPalette")
+    static let sopRemindersChanged = Notification.Name("TomorrowPet.sopRemindersChanged")
 }
 
 enum AppConstants {

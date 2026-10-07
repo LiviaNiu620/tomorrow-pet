@@ -1,5 +1,5 @@
 import Foundation
-import UserNotifications
+@preconcurrency import UserNotifications
 
 @MainActor
 final class ReminderService: NSObject, UNUserNotificationCenterDelegate {
@@ -24,8 +24,8 @@ final class ReminderService: NSObject, UNUserNotificationCenterDelegate {
 
         for weekday in 2...7 {
             let content = UNMutableNotificationContent()
-            content.title = "史努比来找你安排明天了"
-            content.body = "看看明天的 Calendar，用 AI 选出最重要的三件事。"
+            content.title = "团子来找你安排明天了"
+            content.body = "团子已经看过明天的日历，帮你把三件重点排进空档吧。"
             content.sound = .default
             content.userInfo = ["route": "planner"]
             let trigger = UNCalendarNotificationTrigger(
@@ -55,20 +55,42 @@ final class ReminderService: NSObject, UNUserNotificationCenterDelegate {
         try await center.add(UNNotificationRequest(identifier: weeklyID, content: weeklyContent, trigger: weeklyTrigger))
     }
 
+    /// 为开启“到点提醒”的 SOP 时段安排每日通知。
+    func scheduleSOPReminders(blocks: [SOPTimeBlock]) async {
+        let pending = await center.pendingNotificationRequests()
+        center.removePendingNotificationRequests(withIdentifiers: pending.map(\.identifier).filter { $0.hasPrefix("tomorrow-pet-sop-") })
+        for block in blocks where block.remind && block.start < 24 * 60 {
+            let content = UNMutableNotificationContent()
+            content.title = "团子：\(block.title)"
+            content.body = "\(DayPlanner.clock(block.start))–\(DayPlanner.clock(block.end)) 的节奏开始了。"
+            content.sound = .default
+            content.userInfo = ["route": "today"]
+            var components = DateComponents(hour: block.start / 60, minute: block.start % 60)
+            switch block.scope {
+            case .everyday: break
+            case .sunday: components.weekday = 1
+            case .monthEnd: continue
+            }
+            let trigger = UNCalendarNotificationTrigger(dateMatching: components, repeats: true)
+            try? await center.add(UNNotificationRequest(identifier: "tomorrow-pet-sop-\(block.id)", content: content, trigger: trigger))
+        }
+    }
+
     nonisolated func userNotificationCenter(
         _ center: UNUserNotificationCenter,
         didReceive response: UNNotificationResponse,
         withCompletionHandler completionHandler: @escaping () -> Void
     ) {
+        let route = response.notification.request.content.userInfo["route"] as? String
         Task { @MainActor in
             AppWindowActivator.showMainWindow()
-            let route = response.notification.request.content.userInfo["route"] as? String
-            NotificationCenter.default.post(
-                name: route == "weekly" ? .openWeeklyPlanner : .openTomorrowPlanner,
-                object: nil
-            )
-            completionHandler()
+            switch route {
+            case "weekly": NotificationCenter.default.post(name: .openWeeklyPlanner, object: nil)
+            case "today": AppRouter.shared.go(.today, mode: .today)
+            default: NotificationCenter.default.post(name: .openTomorrowPlanner, object: nil)
+            }
         }
+        completionHandler()
     }
 
     nonisolated func userNotificationCenter(

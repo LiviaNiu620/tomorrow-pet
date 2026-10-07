@@ -5,11 +5,17 @@ MODE="${1:-run}"
 APP_NAME="TomorrowPet"
 BUNDLE_ID="com.tomorrowpet.desktop"
 MIN_SYSTEM_VERSION="14.0"
-APP_VERSION="0.2.0"
+APP_VERSION="0.3.0"
+TARGET_ARCH="${DANGO_ARCH:-$(uname -m)}"
+BUILD_CONFIGURATION="${DANGO_CONFIGURATION:-debug}"
+if [[ "$TARGET_ARCH" != "arm64" && "$TARGET_ARCH" != "x86_64" ]]; then
+  echo "Unsupported architecture: $TARGET_ARCH" >&2
+  exit 2
+fi
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-BUILD_ROOT="$ROOT_DIR/.build/tomorrow-pet"
-DIST_DIR="$ROOT_DIR/dist"
+BUILD_ROOT="${DANGO_BUILD_ROOT:-$ROOT_DIR/.build/tomorrow-pet}"
+DIST_DIR="${DANGO_DIST_DIR:-$ROOT_DIR/dist}"
 APP_BUNDLE="$DIST_DIR/$APP_NAME.app"
 APP_CONTENTS="$APP_BUNDLE/Contents"
 APP_MACOS="$APP_CONTENTS/MacOS"
@@ -26,11 +32,13 @@ prepare_compatible_toolchain() {
   system_sdk="$(cd "$(xcrun --sdk macosx --show-sdk-path)" && pwd -P)"
   compatible_sdk="$BUILD_ROOT/MacOSX.sdk"
   compiler_signature="$(swiftc -version | sed -n 's/.*(\(swiftlang-[^ ]*\).*/\1/p')"
-  sdk_interface="$system_sdk/usr/lib/swift/Swift.swiftmodule/arm64e-apple-macos.swiftinterface"
+  local sdk_arch="$TARGET_ARCH"
+  [[ "$sdk_arch" == "arm64" ]] && sdk_arch="arm64e"
+  sdk_interface="$system_sdk/usr/lib/swift/Swift.swiftmodule/$sdk_arch-apple-macos.swiftinterface"
   sdk_signature="$(sed -n 's/.*(\(swiftlang-[^ ]*\).*/\1/p' "$sdk_interface" | head -1)"
 
   if [[ "$compiler_signature" != "$sdk_signature" ]]; then
-    if [[ ! -d "$compatible_sdk" ]] || ! rg -q "$compiler_signature" "$compatible_sdk/usr/lib/swift/Swift.swiftmodule/arm64e-apple-macos.swiftinterface"; then
+    if [[ ! -d "$compatible_sdk" ]] || ! rg -q "$compiler_signature" "$compatible_sdk/usr/lib/swift/Swift.swiftmodule/$sdk_arch-apple-macos.swiftinterface"; then
       rm -rf "$compatible_sdk"
       cp -cR "$system_sdk" "$compatible_sdk"
       find "$compatible_sdk" -name '*.swiftinterface' -print0 \
@@ -61,6 +69,10 @@ prepare_compatible_toolchain() {
 build_directly() {
   prepare_compatible_toolchain
   local source_files=()
+  local optimization_flags=(-g)
+  if [[ "$BUILD_CONFIGURATION" == "release" ]]; then
+    optimization_flags=(-O)
+  fi
   while IFS= read -r source_file; do
     source_files+=("$source_file")
   done < <(find "$ROOT_DIR/Sources/TomorrowPet" -name '*.swift' -print | sort)
@@ -68,9 +80,9 @@ build_directly() {
   CLANG_MODULE_CACHE_PATH="$MODULE_CACHE" swiftc \
     -vfsoverlay "$VFS_OVERLAY" \
     -sdk "$COMPATIBLE_SDK" \
-    -target "arm64-apple-macosx$MIN_SYSTEM_VERSION" \
+    -target "$TARGET_ARCH-apple-macosx$MIN_SYSTEM_VERSION" \
     -module-cache-path "$MODULE_CACHE" \
-    -g \
+    "${optimization_flags[@]}" \
     -o "$BUILD_ROOT/$APP_NAME" \
     "${source_files[@]}"
 
@@ -83,8 +95,8 @@ build_app() {
 
   if [[ -f "$BUILD_ROOT/use-direct-build" ]]; then
     build_directly
-  elif swift build --cache-path "$SWIFTPM_CACHE" >"$BUILD_LOG" 2>&1; then
-    BUILD_BINARY="$(swift build --show-bin-path)/$APP_NAME"
+  elif swift build --scratch-path "$BUILD_ROOT/swiftpm" --arch "$TARGET_ARCH" --configuration "$BUILD_CONFIGURATION" --cache-path "$SWIFTPM_CACHE" >"$BUILD_LOG" 2>&1; then
+    BUILD_BINARY="$(swift build --scratch-path "$BUILD_ROOT/swiftpm" --arch "$TARGET_ARCH" --configuration "$BUILD_CONFIGURATION" --show-bin-path)/$APP_NAME"
   elif rg -q 'Invalid manifest|SDK is not supported|SwiftShims|PackageDescription' "$BUILD_LOG"; then
     echo "SwiftPM toolchain mismatch detected; using the project-local compatibility build."
     : > "$BUILD_ROOT/use-direct-build"
@@ -151,7 +163,7 @@ run_self_tests() {
   CLANG_MODULE_CACHE_PATH="$MODULE_CACHE" swiftc \
     -vfsoverlay "$VFS_OVERLAY" \
     -sdk "$COMPATIBLE_SDK" \
-    -target "arm64-apple-macosx$MIN_SYSTEM_VERSION" \
+    -target "$TARGET_ARCH-apple-macosx$MIN_SYSTEM_VERSION" \
     -module-cache-path "$MODULE_CACHE" \
     -o "$BUILD_ROOT/TomorrowPetSelfTests" \
     "$ROOT_DIR/Sources/TomorrowPet/Models/TaskModels.swift" \
@@ -168,6 +180,8 @@ run_self_tests() {
     "$ROOT_DIR/Sources/TomorrowPet/Services/OpenAIPlanningService.swift" \
     "$ROOT_DIR/Sources/TomorrowPet/Services/OpenAITaskBreakdownService.swift" \
     "$ROOT_DIR/Sources/TomorrowPet/Support/AppNotifications.swift" \
+    "$ROOT_DIR/Sources/TomorrowPet/Support/QuickCaptureParser.swift" \
+    "$ROOT_DIR/Sources/TomorrowPet/Support/DayPlanner.swift" \
     "$ROOT_DIR/script/SelfTest.swift"
   "$BUILD_ROOT/TomorrowPetSelfTests"
 }
@@ -182,7 +196,7 @@ stop_existing_app() {
   CLANG_MODULE_CACHE_PATH="$MODULE_CACHE" swiftc \
     -vfsoverlay "$VFS_OVERLAY" \
     -sdk "$COMPATIBLE_SDK" \
-    -target "arm64-apple-macosx$MIN_SYSTEM_VERSION" \
+    -target "$TARGET_ARCH-apple-macosx$MIN_SYSTEM_VERSION" \
     -module-cache-path "$MODULE_CACHE" \
     "$ROOT_DIR/script/StopRunningApp.swift" \
     -o "$BUILD_ROOT/StopRunningApp"
@@ -190,7 +204,9 @@ stop_existing_app() {
 }
 
 build_app
-stop_existing_app
+if [[ "$MODE" != "--build" && "$MODE" != "build" ]]; then
+  stop_existing_app
+fi
 stage_bundle
 
 open_app() {

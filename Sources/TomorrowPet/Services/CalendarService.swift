@@ -42,7 +42,15 @@ final class CalendarService: ObservableObject {
     func requestAppleAccessAndRefresh(referenceDate: Date = .now) async {
         do {
             if !hasAccess {
-                _ = try await eventStore.requestFullAccessToEvents()
+                let _: Bool = try await withCheckedThrowingContinuation { continuation in
+                    eventStore.requestFullAccessToEvents { granted, error in
+                        if let error {
+                            continuation.resume(throwing: error)
+                        } else {
+                            continuation.resume(returning: granted)
+                        }
+                    }
+                }
                 authorizationStatus = EKEventStore.authorizationStatus(for: .event)
             }
             guard hasAccess else {
@@ -100,6 +108,11 @@ final class CalendarService: ObservableObject {
         upcomingPlanningEvents = result.events
         errorMessage = result.errorMessage
         if hasAnyCalendarAccess { lastSuccessfulSyncAt = .now }
+    }
+
+    /// 读取任意时间段的合并事件（不改变已发布的状态），供时间轴和周视图使用。
+    func fetchEvents(from start: Date, to end: Date) async -> [CalendarEventSummary] {
+        await loadEvents(from: start, to: end).events
     }
 
     // 同步包装保留给现有代码；Google 数据由异步 refresh 方法合并。
