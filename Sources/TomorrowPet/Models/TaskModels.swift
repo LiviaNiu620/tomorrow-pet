@@ -226,6 +226,12 @@ struct TaskItem: Identifiable, Codable, Hashable {
     var parentTaskID: UUID?
     var trashedFromStatus: TaskStatus?
     var deletedAt: Date?
+    /// 当天的开始时间（距午夜的分钟数），配合 plannedDate 把任务排进时间轴。
+    var scheduledMinute: Int?
+    /// 关联的本周目标序号（0–2）。
+    var weeklyGoalIndex: Int?
+    /// 被顺延的次数，用于复盘里的“被顺延最多”。
+    var postponeCount: Int?
 
     init(
         id: UUID = UUID(),
@@ -290,6 +296,8 @@ struct TaskItem: Identifiable, Codable, Hashable {
         if target < shortTermBoundary { return .shortTerm }
         return .longTerm
     }
+
+    var plannedDuration: Int { max(5, estimatedMinutes ?? 30) }
 
     func isPlanned(on date: Date, calendar: Calendar = .current) -> Bool {
         guard let plannedDate else { return false }

@@ -144,10 +144,120 @@ final class TaskStore: ObservableObject {
         )
     }
 
-    func update(_ task: TaskItem) {
+    func update(_ task: TaskItem, registersUndo: Bool = true) {
         guard tasks.contains(where: { $0.id == task.id }) else { return }
-        registerUndo(message: "已更新任务")
+        if registersUndo { registerUndo(message: "已更新任务") }
         applyUpdate(task)
+    }
+
+    /// 修改一个任务的部分字段（单次撤销）。
+    func mutate(_ id: UUID, message: String = "已更新任务", registersUndo: Bool = true, _ change: (inout TaskItem) -> Void) {
+        guard var task = task(id: id) else { return }
+        change(&task)
+        guard task != self.task(id: id) else { return }
+        if registersUndo { registerUndo(message: message) }
+        applyUpdate(task)
+    }
+
+    /// 把任务排进某天的时间轴；minute 为 nil 表示当天但未定时间。
+    func schedule(_ id: UUID, on date: Date, minute: Int?, calendar: Calendar = .current) {
+        mutate(id, message: minute == nil ? "已安排到这一天" : "已排进时间轴") { task in
+            task.plannedDate = calendar.startOfDay(for: date)
+            task.scheduledMinute = minute
+            if task.status == .inbox || task.status == .next { task.status = .planned }
+        }
+    }
+
+    func unschedule(_ id: UUID) {
+        mutate(id, message: "已移出时间轴") { $0.scheduledMinute = nil }
+    }
+
+    func clearPlannedDate(_ id: UUID) {
+        mutate(id, message: "已移回待安排") { task in
+            task.plannedDate = nil
+            task.scheduledMinute = nil
+            task.focusDate = nil
+            if task.status == .planned { task.status = .next }
+        }
+    }
+
+    /// 顺延：计划日期推后，记录顺延次数。
+    func postpone(_ id: UUID, to date: Date, calendar: Calendar = .current) {
+        mutate(id, message: "已顺延") { task in
+            let wasFocus = task.focusDate.map { calendar.isDate($0, inSameDayAs: task.plannedDate ?? $0) } ?? false
+            task.plannedDate = calendar.startOfDay(for: date)
+            task.scheduledMinute = nil
+            task.focusDate = wasFocus ? calendar.startOfDay(for: date) : nil
+            task.postponeCount = (task.postponeCount ?? 0) + 1
+            if task.status == .inbox || task.status == .next { task.status = .planned }
+        }
+    }
+
+    func setFocus(_ id: UUID, on date: Date, isFocus: Bool, calendar: Calendar = .current) {
+        mutate(id, message: isFocus ? "已设为 Top 3" : "已移出 Top 3") { task in
+            task.focusDate = isFocus ? calendar.startOfDay(for: date) : nil
+            if isFocus && task.plannedDate == nil { task.plannedDate = calendar.startOfDay(for: date) }
+        }
+    }
+
+    func tasks(plannedOn date: Date, calendar: Calendar = .current) -> [TaskItem] {
+        tasks.filter { $0.status != .trashed && $0.isPlanned(on: date, calendar: calendar) }
+    }
+
+    /// 某天的 Top 3：当天被标为重点的任务，按优先级排序。
+    func focusTasks(on date: Date, calendar: Calendar = .current) -> [TaskItem] {
+        tasks(plannedOn: date, calendar: calendar)
+            .filter { task in task.focusDate.map { calendar.isDate($0, inSameDayAs: date) } == true }
+            .sorted { lhs, rhs in
+                if lhs.priority != rhs.priority { return lhs.priority < rhs.priority }
+                return (lhs.scheduledMinute ?? 9_999) < (rhs.scheduledMinute ?? 9_999)
+            }
+    }
+
+    @discardableResult
+    func addTask(from capture: ParsedCapture, fallbackDate: Date?, calendar: Calendar = .current) -> TaskItem? {
+        let cleanTitle = capture.title.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !cleanTitle.isEmpty else { return nil }
+        registerUndo(message: "已添加任务")
+        let date = capture.date ?? fallbackDate
+        let areaID = capture.areaName.flatMap { name in
+            areas.first { $0.name.caseInsensitiveCompare(name) == .orderedSame }?.id
+        }
+        var task = TaskItem(
+            title: cleanTitle,
+            areaID: areaID,
+            tags: capture.unknownTag.map { [$0] } ?? [],
+            status: date == nil ? .inbox : .planned,
+            priority: capture.priority ?? .none,
+            estimatedMinutes: capture.duration,
+            plannedDate: date.map { calendar.startOfDay(for: $0) }
+        )
+        task.scheduledMinute = date == nil ? nil : capture.minute
+        tasks.insert(task, at: 0)
+        save()
+        return task
+    }
+
+    func children(of id: UUID) -> [TaskItem] {
+        tasks.filter { $0.parentTaskID == id && $0.status != .trashed }
+            .sorted { $0.createdAt < $1.createdAt }
+    }
+
+    @discardableResult
+    func addSubtask(title: String, to parent: TaskItem) -> TaskItem? {
+        let clean = title.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !clean.isEmpty else { return nil }
+        registerUndo(message: "已添加子任务")
+        let task = TaskItem(
+            title: clean,
+            areaID: parent.areaID,
+            project: parent.project.isEmpty ? parent.title : parent.project,
+            status: .next,
+            parentTaskID: parent.id
+        )
+        tasks.append(task)
+        save()
+        return task
     }
 
     private func applyUpdate(_ task: TaskItem) {
@@ -245,10 +355,30 @@ final class TaskStore: ObservableObject {
         tasks(for: destination).count
     }
 
-    func apply(_ suggestions: [AISuggestedTask], to date: Date, markAsFocus: Bool) {
+    func apply(
+        _ suggestions: [AISuggestedTask],
+        to date: Date,
+        markAsFocus: Bool,
+        scheduledMinutes: [UUID: Int] = [:]
+    ) {
         guard !suggestions.isEmpty else { return }
         registerUndo(message: "已应用 AI 计划")
+        let countBefore = tasks.count
         for suggestion in suggestions {
+            defer {
+                if let minute = scheduledMinutes[suggestion.id] {
+                    if let rawID = suggestion.taskID, let taskID = UUID(uuidString: rawID),
+                       let index = tasks.firstIndex(where: { $0.id == taskID }) {
+                        tasks[index].scheduledMinute = minute
+                    } else if let inputID = suggestion.inputItemID,
+                              let index = tasks.firstIndex(where: { $0.sourceEventID == inputID }) {
+                        tasks[index].scheduledMinute = minute
+                    } else if tasks.count > countBefore, let last = tasks.indices.last,
+                              tasks[last].title == suggestion.title {
+                        tasks[last].scheduledMinute = minute
+                    }
+                }
+            }
             if let rawID = suggestion.taskID,
                let taskID = UUID(uuidString: rawID),
                let index = tasks.firstIndex(where: { $0.id == taskID }) {

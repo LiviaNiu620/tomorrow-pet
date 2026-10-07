@@ -37,6 +37,37 @@ final class DailySOPStore: ObservableObject {
         DailySOPTemplate.planningItems(for: date, configuration: configuration, calendar: calendar)
     }
 
+    func blocks(for date: Date, calendar: Calendar = .current) -> [SOPTimeBlock] {
+        DailySOPTemplate.blocks(for: date, configuration: configuration, calendar: calendar)
+    }
+
+    var allTimeBlocks: [SOPTimeBlock] {
+        configuration.timeBlocks ?? SOPTimeBlock.defaults
+    }
+
+    func updateTimeBlock(_ block: SOPTimeBlock) {
+        var blocks = allTimeBlocks
+        if let index = blocks.firstIndex(where: { $0.id == block.id }) {
+            blocks[index] = block
+        } else {
+            blocks.append(block)
+        }
+        configuration.timeBlocks = blocks.sorted { $0.start < $1.start }
+        save()
+        NotificationCenter.default.post(name: .sopRemindersChanged, object: nil)
+    }
+
+    func removeTimeBlock(id: String) {
+        configuration.timeBlocks = allTimeBlocks.filter { $0.id != id }
+        save()
+        NotificationCenter.default.post(name: .sopRemindersChanged, object: nil)
+    }
+
+    /// 某一天全部打卡项（含周日、月末追加分组）。
+    func items(for date: Date, calendar: Calendar = .current) -> [DailySOPItem] {
+        sections(for: date, calendar: calendar).flatMap(\.items)
+    }
+
     func updateConfiguration(_ value: DailySOPConfiguration) {
         configuration = Self.normalized(value)
         save()

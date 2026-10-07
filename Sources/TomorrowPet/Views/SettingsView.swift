@@ -66,7 +66,7 @@ struct SettingsView: View {
 
             Section("桌面宠物") {
                 HStack(spacing: 14) {
-                    PetFaceView(mood: .happy)
+                    DangoMascot(mood: .happy, size: 40)
                         .frame(width: 54, height: 54)
                     VStack(alignment: .leading, spacing: 2) {
                         Text("桌面史努比")

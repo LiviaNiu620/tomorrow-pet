@@ -102,6 +102,11 @@ final class CalendarService: ObservableObject {
         if hasAnyCalendarAccess { lastSuccessfulSyncAt = .now }
     }
 
+    /// 读取任意时间段的合并事件（不改变已发布的状态），供时间轴和周视图使用。
+    func fetchEvents(from start: Date, to end: Date) async -> [CalendarEventSummary] {
+        await loadEvents(from: start, to: end).events
+    }
+
     // 同步包装保留给现有代码；Google 数据由异步 refresh 方法合并。
     func loadTomorrow(referenceDate: Date = .now) {
         let calendar = Calendar.current

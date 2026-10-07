@@ -40,6 +40,47 @@ struct DailySOPConfiguration: Codable, Hashable {
     var dailySections: [DailySOPSection]
     var sundaySection: DailySOPSection
     var monthlySection: DailySOPSection
+    /// 时间轴上的 SOP 时段；为空时使用默认时段。
+    var timeBlocks: [SOPTimeBlock]? = nil
+}
+
+enum SOPBlockScope: String, Codable, CaseIterable, Identifiable {
+    case everyday
+    case sunday
+    case monthEnd
+
+    var id: String { rawValue }
+    var title: String {
+        switch self {
+        case .everyday: "工作日"
+        case .sunday: "周日"
+        case .monthEnd: "月末周日"
+        }
+    }
+}
+
+struct SOPTimeBlock: Identifiable, Codable, Hashable {
+    var id: String
+    var title: String
+    var start: Int
+    var end: Int
+    var scope: SOPBlockScope
+    var remind: Bool
+    var tintName: String
+
+    var duration: Int { max(0, end - start) }
+
+    static let defaults: [SOPTimeBlock] = [
+        SOPTimeBlock(id: "morning", title: "早晨与通勤", start: 420, end: 540, scope: .everyday, remind: true, tintName: "orange"),
+        SOPTimeBlock(id: "work-start", title: "工作启动 · Email · Top 3", start: 540, end: 565, scope: .everyday, remind: true, tintName: "blue"),
+        SOPTimeBlock(id: "gym", title: "健身", start: 720, end: 800, scope: .everyday, remind: true, tintName: "pink"),
+        SOPTimeBlock(id: "email-pm", title: "Email 第二轮", start: 990, end: 1005, scope: .everyday, remind: false, tintName: "blue"),
+        SOPTimeBlock(id: "wrap", title: "收尾 · 校车复盘", start: 1035, end: 1090, scope: .everyday, remind: true, tintName: "blue"),
+        SOPTimeBlock(id: "dinner", title: "做饭 · 晚饭 · 背 20 词", start: 1100, end: 1220, scope: .everyday, remind: false, tintName: "orange"),
+        SOPTimeBlock(id: "night", title: "洗漱放松 · 复盘 · 睡觉", start: 1320, end: 1440, scope: .everyday, remind: true, tintName: "purple"),
+        SOPTimeBlock(id: "sunday-plan", title: "周日计划 SOP", start: 1230, end: 1290, scope: .sunday, remind: true, tintName: "green"),
+        SOPTimeBlock(id: "month-review", title: "月度复盘", start: 1290, end: 1320, scope: .monthEnd, remind: true, tintName: "pink")
+    ]
 }
 
 enum DailySOPTemplate {
@@ -60,6 +101,38 @@ enum DailySOPTemplate {
             }
         }
         return result
+    }
+
+    static func blocks(
+        for date: Date,
+        configuration: DailySOPConfiguration,
+        calendar: Calendar = .current
+    ) -> [SOPTimeBlock] {
+        let all = configuration.timeBlocks ?? SOPTimeBlock.defaults
+        let isSunday = calendar.component(.weekday, from: date) == 1
+        let isMonthEnd = isSunday && isLastSundayOfMonth(date, calendar: calendar)
+        return all.filter { block in
+            switch block.scope {
+            case .everyday: true
+            case .sunday: isSunday
+            case .monthEnd: isMonthEnd
+            }
+        }
+        .sorted { $0.start < $1.start }
+    }
+
+    /// 解析 “07:00”“08:30–09:00”“09:10 前”“24:00” 等写法中的第一个时间。
+    static func startMinute(of time: String?) -> Int? {
+        guard let time else { return nil }
+        let pattern = try? NSRegularExpression(pattern: "(\\d{1,2})[:：](\\d{2})")
+        let range = NSRange(time.startIndex..., in: time)
+        guard let match = pattern?.firstMatch(in: time, range: range),
+              let hourRange = Range(match.range(at: 1), in: time),
+              let minuteRange = Range(match.range(at: 2), in: time),
+              let hour = Int(time[hourRange]),
+              let minute = Int(time[minuteRange]),
+              hour <= 24, minute < 60 else { return nil }
+        return hour * 60 + minute
     }
 
     static func planningItems(for date: Date, calendar: Calendar = .current) -> [DailySOPItem] {
